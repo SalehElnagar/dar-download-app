@@ -26,9 +26,10 @@ if ! grep -Fq "target_platform=\${TARGET_PLATFORM:-linux/amd64}" scripts/build-i
   printf '%s\n' "image construction is not explicitly bound to the recorded Linux AMD64 target." >&2
   exit 1
 fi
-if ! grep -Fq "FROM --platform=\$BUILDPLATFORM" Dockerfile ||
+if ! grep -Eq '^FROM golang:[^[:space:]]+@sha256:[0-9a-f]{64} AS build$' Dockerfile ||
+  grep -Fq "FROM --platform=\$BUILDPLATFORM" Dockerfile ||
   grep -Eq '^ARG TARGET(OS|ARCH)=' Dockerfile; then
-  printf '%s\n' "Dockerfile does not bind cross-compilation to BuildKit target arguments." >&2
+  printf '%s\n' "Dockerfile builder is not portable, digest-pinned, and bound to target arguments." >&2
   exit 1
 fi
 if ! grep -Fq './scripts/create-provenance.sh' .github/workflows/release.yaml; then
