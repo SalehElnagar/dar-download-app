@@ -1,0 +1,7 @@
+version: 1
+policy:
+  maximum_days: 90
+  require_owner: true
+  require_compensating_controls: true
+  allow_wildcards: false
+exceptions: []

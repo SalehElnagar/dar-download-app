@@ -1,0 +1,62 @@
+rules:
+  - id: dar-no-shared-key-or-connection-string
+    message: Storage keys and connection strings are forbidden; use the exact managed identity.
+    severity: ERROR
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: $PKG.NewSharedKeyCredential(...)
+          - pattern: $PKG.NewClientFromConnectionString(...)
+    paths:
+      exclude:
+        - "**/*_test.go"
+
+  - id: dar-no-request-authorization-token
+    message: The customer Authorization header must never become application or storage authority.
+    severity: ERROR
+    languages: [go]
+    pattern: $REQUEST.Header.Get("Authorization")
+    paths:
+      exclude:
+        - "**/*_test.go"
+
+  - id: dar-no-sensitive-header-logging
+    message: Raw request headers must not be logged.
+    severity: ERROR
+    languages: [go]
+    pattern-either:
+      - patterns:
+          - pattern: $LOGGER.$METHOD(..., $REQUEST.Header, ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(Debug|Info|Warn|Error|Log|Print|Printf|Println)$
+      - patterns:
+          - pattern: $LOGGER.$METHOD(..., $REQUEST.Header.Get($HEADER), ...)
+          - metavariable-regex:
+              metavariable: $METHOD
+              regex: ^(Debug|Info|Warn|Error|Log|Print|Printf|Println)$
+    paths:
+      exclude:
+        - "**/*_test.go"
+
+  - id: dar-no-unbounded-readall-in-production
+    message: Production request and Blob data must be streamed with explicit bounds.
+    severity: ERROR
+    languages: [go]
+    pattern: io.ReadAll(...)
+    paths:
+      exclude:
+        - "**/*_test.go"
+        - "/internal/testsupport/**"
+
+  - id: dar-no-default-http-server
+    message: Default HTTP serving helpers omit the required timeout and header bounds.
+    severity: ERROR
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: http.ListenAndServe(...)
+          - pattern: http.Serve(...)
+    paths:
+      exclude:
+        - "**/*_test.go"

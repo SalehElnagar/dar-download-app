@@ -1,0 +1,37 @@
+# Local editors and operating-system files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.tmp
+
+# Credentials and local configuration
+.env
+.env.*
+*.pem
+*.key
+*.p12
+
+# Go build and test output
+bin/
+dist/
+vendor/
+*.exe
+*.test
+*.out
+coverage.out
+coverage.html
+*.prof
+
+# Local security databases and candidate evidence
+.security/cache/
+.security/evidence/
+.security/tools/
+sbom/
+
+# Customer/release artifacts never belong in source
+*.dar
+*.zip
+
+# Spec Kit generates agent-private command wrappers locally
+.agents/

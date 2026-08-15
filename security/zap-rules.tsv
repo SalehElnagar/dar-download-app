@@ -1,0 +1,14 @@
+# rule-id	action	comment
+10020	WARN	Anti-clickjacking header review
+10021	WARN	Content type options review
+10035	WARN	Strict transport security review
+10038	WARN	Content security policy review
+10049	WARN	Cache control review
+40012	FAIL	Cross-site scripting
+40014	FAIL	Cross-site scripting
+40018	FAIL	SQL injection
+40019	FAIL	SQL injection
+40020	FAIL	SQL injection
+40021	FAIL	SQL injection
+40022	FAIL	SQL injection
+90019	FAIL	Server-side request forgery

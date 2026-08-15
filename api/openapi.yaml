@@ -1,0 +1,161 @@
+openapi: 3.0.3
+info:
+  title: DAR Download Application
+  version: 1.0.0
+  description: >-
+    Private service behind Azure Container Apps Authentication. The platform completes the
+    Entra browser flow; the application independently validates the trusted principal and
+    exact release entitlement.
+servers:
+  - url: https://dar-download.internal.example
+paths:
+  /healthz:
+    get:
+      operationId: health
+      summary: Report process liveness without identity or storage access
+      responses:
+        "200":
+          description: Healthy process
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+  /v1/releases/{release_id}/download:
+    get:
+      operationId: downloadRelease
+      summary: Download one exact release authorized for the authenticated principal
+      security:
+        - platformSession: []
+      parameters:
+        - name: release_id
+          in: path
+          required: true
+          example: dar_01JABCDEF0123456789XYZ
+          schema:
+            type: string
+            pattern: ^dar_[A-Za-z0-9_-]{16,96}$
+        - name: Range
+          in: header
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+            pattern: ^bytes=[0-9]*-[0-9]*$
+        - name: If-Range
+          in: header
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        "200":
+          description: Complete current DAR representation
+          headers:
+            Accept-Ranges:
+              schema: { type: string, enum: [bytes] }
+            Cache-Control:
+              schema: { type: string, enum: ["private, no-store"] }
+            Content-Disposition:
+              schema: { type: string }
+            Content-Length:
+              schema: { type: integer, minimum: 0 }
+            ETag:
+              schema: { type: string }
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "206":
+          description: One normalized byte range from the current DAR representation
+          headers:
+            Accept-Ranges:
+              schema: { type: string, enum: [bytes] }
+            Content-Range:
+              schema: { type: string }
+            Content-Length:
+              schema: { type: integer, minimum: 1 }
+            ETag:
+              schema: { type: string }
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "401":
+          $ref: "#/components/responses/AuthenticationRequired"
+        "403":
+          $ref: "#/components/responses/AuthorizationDenied"
+        "404":
+          $ref: "#/components/responses/ReleaseNotFound"
+        "413":
+          $ref: "#/components/responses/ReleaseTooLarge"
+        "416":
+          description: Malformed, unsupported, or unsatisfiable range
+          headers:
+            Content-Range:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example: { error: invalid_range }
+        "502":
+          $ref: "#/components/responses/StorageUnavailable"
+components:
+  securitySchemes:
+    platformSession:
+      type: apiKey
+      in: cookie
+      name: AppServiceAuthSession
+      description: Hosting-platform session; the application does not create this cookie.
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [service, status]
+      properties:
+        service: { type: string, enum: [harmony-dar-download] }
+        status: { type: string, enum: [ok] }
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum:
+            - authentication_required
+            - authorization_denied
+            - invalid_range
+            - method_not_allowed
+            - release_not_found
+            - release_too_large
+            - storage_unavailable
+  responses:
+    AuthenticationRequired:
+      description: Trusted platform identity evidence is absent or invalid
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: authentication_required }
+    AuthorizationDenied:
+      description: The exact principal is not entitled to this exact release
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: authorization_denied }
+    ReleaseNotFound:
+      description: The configured release or current object does not exist
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: release_not_found }
+    ReleaseTooLarge:
+      description: The current object exceeds the fixed delivery bound
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: release_too_large }
+    StorageUnavailable:
+      description: Private storage could not safely deliver the current object
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: storage_unavailable }

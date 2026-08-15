@@ -1,0 +1,175 @@
+openapi: 3.1.0
+info:
+  title: DAR Download Application
+  version: 1.0.0
+  description: >-
+    Private application contract behind Azure Container Apps Authentication. The hosting
+    platform performs the browser OIDC redirect; the application validates trusted identity
+    evidence and exact per-release entitlement before private Blob reads.
+servers:
+  - url: https://dar-download.internal.example
+paths:
+  /healthz:
+    get:
+      operationId: health
+      summary: Report application liveness without identity or storage access
+      responses:
+        '200':
+          description: The process is ready to accept requests.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+            X-Content-Type-Options:
+              schema: { type: string, const: nosniff }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+              example:
+                service: harmony-dar-download
+                status: ok
+  /v1/releases/{release_id}/download:
+    get:
+      operationId: downloadRelease
+      summary: Download one exact release authorized for the authenticated principal
+      security:
+        - platformSession: []
+      parameters:
+        - name: release_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^dar_[A-Za-z0-9_-]{16,96}$'
+        - name: Range
+          in: header
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+            pattern: '^bytes=[0-9]*-[0-9]*$'
+        - name: If-Range
+          in: header
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        '200':
+          description: Complete current DAR representation.
+          headers:
+            Accept-Ranges: { $ref: '#/components/headers/AcceptRanges' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+            Content-Disposition: { $ref: '#/components/headers/ContentDisposition' }
+            Content-Length: { $ref: '#/components/headers/ContentLength' }
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Content-Type-Options: { $ref: '#/components/headers/NoSniff' }
+          content:
+            application/octet-stream:
+              schema: { type: string, contentEncoding: binary }
+        '206':
+          description: One normalized byte range from the current DAR representation.
+          headers:
+            Accept-Ranges: { $ref: '#/components/headers/AcceptRanges' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+            Content-Disposition: { $ref: '#/components/headers/ContentDisposition' }
+            Content-Length: { $ref: '#/components/headers/ContentLength' }
+            Content-Range: { $ref: '#/components/headers/ContentRange' }
+            ETag: { $ref: '#/components/headers/ETag' }
+            X-Content-Type-Options: { $ref: '#/components/headers/NoSniff' }
+          content:
+            application/octet-stream:
+              schema: { type: string, contentEncoding: binary }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/AuthorizationDenied' }
+        '404': { $ref: '#/components/responses/ReleaseNotFound' }
+        '413': { $ref: '#/components/responses/ReleaseTooLarge' }
+        '416':
+          description: The range is malformed, unsupported, or unsatisfiable.
+          headers:
+            Accept-Ranges: { $ref: '#/components/headers/AcceptRanges' }
+            Content-Range:
+              description: Current complete length in `bytes */<size>` form.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: invalid_range }
+        '502': { $ref: '#/components/responses/StorageUnavailable' }
+components:
+  securitySchemes:
+    platformSession:
+      type: apiKey
+      in: cookie
+      name: AppServiceAuthSession
+      description: >-
+        Hosting-platform session established by the Entra browser round trip. The application
+        does not create or parse this cookie directly.
+  headers:
+    AcceptRanges:
+      schema: { type: string, const: bytes }
+    PrivateNoStore:
+      schema: { type: string, const: 'private, no-store' }
+    ContentDisposition:
+      schema: { type: string, pattern: '^attachment; filename="[A-Za-z0-9._-]+[.]dar"$' }
+    ContentLength:
+      schema: { type: integer, minimum: 0 }
+    ContentRange:
+      schema: { type: string, pattern: '^bytes [0-9]+-[0-9]+/[0-9]+$' }
+    ETag:
+      schema: { type: string, minLength: 2, maxLength: 128 }
+    NoSniff:
+      schema: { type: string, const: nosniff }
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [service, status]
+      properties:
+        service: { type: string, const: harmony-dar-download }
+        status: { type: string, const: ok }
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum:
+            - authentication_required
+            - authorization_denied
+            - invalid_range
+            - release_not_found
+            - release_too_large
+            - storage_unavailable
+  responses:
+    AuthenticationRequired:
+      description: Trusted identity evidence was missing, malformed, ambiguous, or wrong-tenant.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: authentication_required }
+    AuthorizationDenied:
+      description: The exact principal is not entitled to the exact configured release.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: authorization_denied }
+    ReleaseNotFound:
+      description: The configured release or its current object does not exist.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: release_not_found }
+    ReleaseTooLarge:
+      description: The current object exceeds the application's fixed delivery bound.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: release_too_large }
+    StorageUnavailable:
+      description: Private storage could not safely deliver the current object.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: storage_unavailable }
