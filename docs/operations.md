@@ -7,10 +7,13 @@ interactive login, redirects, callbacks, session management, discovery, key retr
 validation. A separately deployed OIDC authentication layer owns the customer browser session
 or bearer flow.
 
-After validating the login or token, that layer must strip every caller-supplied identity
-header and inject exactly one `X-DAR-OIDC-Issuer` and exactly one `X-DAR-OIDC-Subject` header.
-Only private traffic from that layer may reach the app. The app exact-matches the issuer and
-then exact-matches the opaque, case-sensitive subject against the selected release policy.
+After validating the login or token, the deployment selects exactly one trusted-identity mode.
+The default `oidc_headers` mode receives one stripped-and-injected `X-DAR-OIDC-Issuer` and
+`X-DAR-OIDC-Subject` pair. The optional `azure_container_apps` mode instead accepts only the
+platform-reserved Container Apps principal representation and maps its tenant-bound object ID
+into the same internal issuer-and-subject model. Only private traffic from the configured layer
+may reach the app. The app exact-matches the issuer and then exact-matches the case-sensitive
+subject against the selected release policy.
 
 The platform repository owns the OIDC layer, identity-provider configuration, private ingress,
 networking, DNS, Blob account, managed identity, RBAC, monitoring, and deployment revision.
@@ -22,8 +25,8 @@ Before live testing, the platform owner must prove all of the following:
 
 - The OIDC layer validates the intended issuer and authentication flow before forwarding.
 - Protected requests require authentication, while only `/healthz` is intentionally anonymous.
-- Caller-supplied copies of both internal identity headers are removed before new values are
-  injected, and duplicate values cannot reach the app.
+- The selected identity adapter is explicit; cross-mode, caller-supplied, duplicate, malformed,
+  oversized, or ambiguous identity evidence is rejected.
 - Direct ingress that bypasses the OIDC layer is blocked.
 - TLS terminates only at an approved boundary; the app is not exposed directly to the Internet.
 - The app receives the exact configured issuer string, including any significant trailing slash.
@@ -34,6 +37,37 @@ Before live testing, the platform owner must prove all of the following:
 
 Authentication proves one identity. The Go service still requires the exact subject in the
 release allowlist before it performs any Blob operation.
+
+## Optional Azure Container Apps adapter
+
+`azure_container_apps` is a deployment adapter, not a change to the provider-neutral release
+authorization model. Use it only when Azure Container Apps Authentication is the sole ingress
+path. Microsoft documents that this platform middleware runs before the application, manages
+the authenticated session, injects identity information, and prevents external requests from
+setting its reserved identity headers. See [Container Apps authentication](https://learn.microsoft.com/azure/container-apps/authentication),
+[Microsoft Entra configuration](https://learn.microsoft.com/azure/container-apps/authentication-entra),
+and [the principal-header format](https://learn.microsoft.com/azure/app-service/configure-authentication-user-identities).
+
+Before enabling this mode, read back and verify all of the following as one deployment unit:
+
+- Container Apps Authentication is enabled, HTTPS is required, and unauthenticated protected
+  requests redirect to the single Microsoft provider. Only `/healthz` may be excluded.
+- The Entra registration is single-tenant, its redirect URI is exactly
+  `https://<container-app-fqdn>/.auth/login/aad/callback`, ID-token issuance is enabled, and the
+  auth configuration pins the exact tenant issuer, audience, and allowed test principal. Token
+  storage stays disabled unless separately reviewed.
+- `DAR_DOWNLOAD_TRUSTED_IDENTITY_MODE=azure_container_apps`, the canonical tenant setting, and
+  the exact issuer agree with the platform auth configuration. The release policy contains the
+  same canonical object ID as an exact `allowed_subjects` entry.
+- External ingress belongs to an internal Container Apps environment or an equivalent private
+  boundary with no direct route around the authentication sidecar. A caller-supplied generic
+  `X-DAR-*` identity pair must be rejected by the app.
+
+Container Apps supports a client-secret-free ID-token flow when no client secret is configured.
+Microsoft identifies that as an implicit flow and recommends stronger alternatives where
+practical. Treat the zero-credential form as a POC choice: keep the registration dedicated,
+single-tenant, token store disabled, allowed principal narrow, and reassess the browser flow
+before production promotion.
 
 ## Release policy
 

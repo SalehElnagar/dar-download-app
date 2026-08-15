@@ -58,6 +58,7 @@ go test -count=1 -race ./...
 printf '%s\n' "[prebuild 8/14] bounded native fuzzing"
 go test -run='^$' -fuzz=FuzzParseEnvironmentPolicy -fuzztime=100000x ./internal/config
 go test -run='^$' -fuzz=FuzzAuthenticateOIDCHeaders -fuzztime=100000x ./internal/auth
+go test -run='^$' -fuzz=FuzzAuthenticateAzureContainerApps -fuzztime=100000x ./internal/auth
 go test -run='^$' -fuzz=FuzzSelectRange -fuzztime=100000x ./internal/download
 
 printf '%s\n' "[prebuild 9/14] Go vulnerability database"

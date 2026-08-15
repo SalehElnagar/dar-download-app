@@ -54,7 +54,12 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		writeJSON(writer, http.StatusNotFound, "release_not_found")
 		return
 	}
-	identity, authenticated := auth.Authenticate(request.Header, handler.config.OIDCIssuer)
+	identity, authenticated := auth.Authenticate(
+		request.Header,
+		handler.config.OIDCIssuer,
+		handler.config.TrustedIdentityMode,
+		handler.config.AzureContainerAppsTenantID,
+	)
 	if !authenticated {
 		writeJSON(writer, http.StatusUnauthorized, "authentication_required")
 		return

@@ -15,12 +15,16 @@ import (
 )
 
 const (
-	OIDCIssuerEnv              = "DAR_DOWNLOAD_OIDC_ISSUER"
-	StorageAccountNameEnv      = "DAR_DOWNLOAD_STORAGE_ACCOUNT_NAME"
-	StorageContainerEnv        = "DAR_DOWNLOAD_STORAGE_CONTAINER"
-	ManagedIdentityClientIDEnv = "DAR_DOWNLOAD_MANAGED_IDENTITY_CLIENT_ID"
-	ReleasesJSONEnv            = "DAR_DOWNLOAD_RELEASES_JSON"
-	PortEnv                    = "DAR_DOWNLOAD_PORT"
+	TrustedIdentityModeEnv         = "DAR_DOWNLOAD_TRUSTED_IDENTITY_MODE"
+	OIDCIssuerEnv                  = "DAR_DOWNLOAD_OIDC_ISSUER"
+	AzureContainerAppsTenantIDEnv  = "DAR_DOWNLOAD_AZURE_CONTAINER_APPS_TENANT_ID"
+	StorageAccountNameEnv          = "DAR_DOWNLOAD_STORAGE_ACCOUNT_NAME"
+	StorageContainerEnv            = "DAR_DOWNLOAD_STORAGE_CONTAINER"
+	ManagedIdentityClientIDEnv     = "DAR_DOWNLOAD_MANAGED_IDENTITY_CLIENT_ID"
+	ReleasesJSONEnv                = "DAR_DOWNLOAD_RELEASES_JSON"
+	PortEnv                        = "DAR_DOWNLOAD_PORT"
+	azureContainerAppsIssuerPrefix = "https://login.microsoftonline.com/"
+	azureContainerAppsIssuerSuffix = "/v2.0"
 
 	DefaultPort         = 8000
 	MaxReleases         = 32
@@ -40,17 +44,29 @@ var (
 	downloadNamePattern   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,122}[.]dar$`)
 )
 
+// TrustedIdentityMode selects exactly one deployment-owned identity boundary.
+type TrustedIdentityMode string
+
+const (
+	// TrustedIdentityModeOIDCHeaders accepts only the provider-neutral private-ingress headers.
+	TrustedIdentityModeOIDCHeaders TrustedIdentityMode = "oidc_headers"
+	// TrustedIdentityModeAzureContainerApps accepts only Container Apps platform principal headers.
+	TrustedIdentityModeAzureContainerApps TrustedIdentityMode = "azure_container_apps"
+)
+
 // ErrInvalid indicates that runtime policy is missing, ambiguous, or unsafe.
 var ErrInvalid = errors.New("invalid DAR download configuration")
 
 // Config is the immutable startup policy exposed to the application.
 type Config struct {
-	OIDCIssuer              string
-	StorageAccountName      string
-	StorageContainer        string
-	ManagedIdentityClientID string
-	Port                    int
-	releases                map[string]ReleasePolicy
+	TrustedIdentityMode        TrustedIdentityMode
+	OIDCIssuer                 string
+	AzureContainerAppsTenantID string
+	StorageAccountName         string
+	StorageContainer           string
+	ManagedIdentityClientID    string
+	Port                       int
+	releases                   map[string]ReleasePolicy
 }
 
 // ReleasePolicy binds one opaque route to one Blob, filename, and subject set.
@@ -83,8 +99,15 @@ func IsReleaseID(value string) bool {
 	return releaseIDPattern.MatchString(value)
 }
 
-func isCanonicalUUID(value string) bool {
+// IsCanonicalUUID reports whether value is one lowercase canonical UUID string.
+func IsCanonicalUUID(value string) bool {
 	return uuidPattern.MatchString(value)
+}
+
+// IsAzureContainerAppsIssuer binds the optional adapter to one exact global-Azure tenant issuer.
+func IsAzureContainerAppsIssuer(value, tenantID string) bool {
+	return IsCanonicalUUID(tenantID) &&
+		value == azureContainerAppsIssuerPrefix+tenantID+azureContainerAppsIssuerSuffix
 }
 
 // IsValidOIDCIssuer reports whether value is one exact bounded HTTPS issuer URL.
@@ -108,9 +131,11 @@ func IsValidOIDCSubject(value string) bool {
 
 // LoadEnvironment reads only the documented environment variables.
 func LoadEnvironment() (Config, error) {
-	environment := make(map[string]string, 6)
+	environment := make(map[string]string, 8)
 	for _, name := range []string{
+		TrustedIdentityModeEnv,
 		OIDCIssuerEnv,
+		AzureContainerAppsTenantIDEnv,
 		StorageAccountNameEnv,
 		StorageContainerEnv,
 		ManagedIdentityClientIDEnv,
@@ -139,9 +164,27 @@ func ParseEnvironment(environment map[string]string) (Config, error) {
 		}
 	}
 	if !IsValidOIDCIssuer(environment[OIDCIssuerEnv]) ||
-		!isCanonicalUUID(environment[ManagedIdentityClientIDEnv]) ||
+		!IsCanonicalUUID(environment[ManagedIdentityClientIDEnv]) ||
 		!storageAccountPattern.MatchString(environment[StorageAccountNameEnv]) ||
 		!validContainerName(environment[StorageContainerEnv]) {
+		return Config{}, ErrInvalid
+	}
+
+	mode := TrustedIdentityMode(environment[TrustedIdentityModeEnv])
+	if mode == "" {
+		mode = TrustedIdentityModeOIDCHeaders
+	}
+	azureTenantID := environment[AzureContainerAppsTenantIDEnv]
+	switch mode {
+	case TrustedIdentityModeOIDCHeaders:
+		if azureTenantID != "" {
+			return Config{}, ErrInvalid
+		}
+	case TrustedIdentityModeAzureContainerApps:
+		if !IsAzureContainerAppsIssuer(environment[OIDCIssuerEnv], azureTenantID) {
+			return Config{}, ErrInvalid
+		}
+	default:
 		return Config{}, ErrInvalid
 	}
 
@@ -159,12 +202,14 @@ func ParseEnvironment(environment map[string]string) (Config, error) {
 		return Config{}, ErrInvalid
 	}
 	return Config{
-		OIDCIssuer:              environment[OIDCIssuerEnv],
-		StorageAccountName:      environment[StorageAccountNameEnv],
-		StorageContainer:        environment[StorageContainerEnv],
-		ManagedIdentityClientID: environment[ManagedIdentityClientIDEnv],
-		Port:                    port,
-		releases:                releases,
+		TrustedIdentityMode:        mode,
+		OIDCIssuer:                 environment[OIDCIssuerEnv],
+		AzureContainerAppsTenantID: azureTenantID,
+		StorageAccountName:         environment[StorageAccountNameEnv],
+		StorageContainer:           environment[StorageContainerEnv],
+		ManagedIdentityClientID:    environment[ManagedIdentityClientIDEnv],
+		Port:                       port,
+		releases:                   releases,
 	}, nil
 }
 

@@ -86,7 +86,7 @@ if ! grep -Fq "chmod 0711 \"\$evidence_dir\"" scripts/dast.sh ||
   printf '%s\n' "DAST report files are not narrowly writable during the container scan and restrictive afterward." >&2
   exit 1
 fi
-if [[ $(grep -c -- '-fuzztime=100000x' scripts/prebuild.sh) != "3" ]] ||
+if [[ $(grep -c -- '-fuzztime=100000x' scripts/prebuild.sh) != "4" ]] ||
   grep -Eq -- '-fuzztime=[0-9]+s' scripts/prebuild.sh; then
   printf '%s\n' "pre-build fuzzing is not bound to the deterministic iteration budget." >&2
   exit 1

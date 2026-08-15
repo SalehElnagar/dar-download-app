@@ -106,17 +106,24 @@ func TestTrackedContractsDescribeProviderNeutralBoundary(t *testing.T) {
 		"api/openapi.yaml": {
 			"X-DAR-OIDC-Issuer",
 			"X-DAR-OIDC-Subject",
-			"internal trusted-boundary inputs",
+			"x-trusted-identity-boundary",
+			"oidc_headers",
+			"azure_container_apps",
 			"never public credentials",
 			"trusted OIDC-protected upstream endpoint",
 			`^bytes=(?:[0-9]+-[0-9]*|-[1-9][0-9]*)$`,
 			"dar-download",
 		},
 		"docs/configuration.md": {
+			"DAR_DOWNLOAD_TRUSTED_IDENTITY_MODE",
 			"DAR_DOWNLOAD_OIDC_ISSUER",
+			"DAR_DOWNLOAD_AZURE_CONTAINER_APPS_TENANT_ID",
 			"X-DAR-OIDC-Issuer",
 			"X-DAR-OIDC-Subject",
 			"allowed_subjects",
+		},
+		"docs/operations.md": {
+			"/.auth/login/aad/callback",
 		},
 	}
 	for relative, requiredFragments := range requiredByFile {
@@ -143,11 +150,7 @@ func TestTrackedTreeHasNoSupersededApplicationContract(t *testing.T) {
 	}
 	forbidden := []*regexp.Regexp{
 		regexp.MustCompile(`(?i)har` + `mony`),
-		regexp.MustCompile(`(?i)(^|[^[:alnum:]_])en` + `tra([^[:alnum:]_]|$)`),
-		regexp.MustCompile(`(?i)(^|[^[:alnum:]_])a` + `ad([^[:alnum:]_]|$)`),
 		regexp.MustCompile(`(?i)easy` + `[[:space:]]+auth`),
-		regexp.MustCompile(`(?i)micro` + `softonline`),
-		regexp.MustCompile(`(?i)x-` + `ms-client`),
 		regexp.MustCompile(`(?i)allowed_` + `principal_ids`),
 		regexp.MustCompile(`(?i)appservice` + `authsession`),
 	}
@@ -162,6 +165,51 @@ func TestTrackedTreeHasNoSupersededApplicationContract(t *testing.T) {
 		for _, pattern := range forbidden {
 			if pattern.Match(content) {
 				t.Errorf("%s contains superseded application contract matching %q", relative, pattern)
+			}
+		}
+	}
+}
+
+func TestProviderSpecificAdapterTermsStayInTheirOwnedBoundary(t *testing.T) {
+	root := repositoryRoot(t)
+	command := exec.Command("git", "ls-files", "-z")
+	command.Dir = root
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("git ls-files: %v", err)
+	}
+	allowed := map[string]bool{
+		"README.md":                             true,
+		"api/openapi.yaml":                      true,
+		"docs/assurance-map.md":                 true,
+		"docs/configuration.md":                 true,
+		"docs/operations.md":                    true,
+		"docs/threat-model.md":                  true,
+		"internal/auth/azure_container_apps.go": true,
+		"internal/auth/azure_container_apps_contract_test.go": true,
+		"internal/auth/oidc_fuzz_test.go":                     true,
+		"internal/config/config.go":                           true,
+		"internal/config/config_test.go":                      true,
+		"internal/httpapi/oidc_boundary_test.go":              true,
+		"internal/repository/local_only_paths_test.go":        true,
+	}
+	providerMarkers := []*regexp.Regexp{
+		regexp.MustCompile(`(?i)(^|[^[:alnum:]_])en` + `tra([^[:alnum:]_]|$)`),
+		regexp.MustCompile(`(?i)(^|[^[:alnum:]_])a` + `ad([^[:alnum:]_]|$)`),
+		regexp.MustCompile(`(?i)micro` + `softonline`),
+		regexp.MustCompile(`(?i)x-` + `ms-client`),
+	}
+	for _, relative := range strings.Split(string(output), "\x00") {
+		if relative == "" || allowed[relative] {
+			continue
+		}
+		content, readErr := os.ReadFile(filepath.Join(root, relative))
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		for _, marker := range providerMarkers {
+			if marker.Match(content) {
+				t.Errorf("%s contains provider-adapter material outside the owned boundary", relative)
 			}
 		}
 	}

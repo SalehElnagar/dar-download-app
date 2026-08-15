@@ -18,8 +18,30 @@ type Identity struct {
 	Subject string
 }
 
-// Authenticate returns one exact OIDC identity or false for ambiguous evidence.
-func Authenticate(headers http.Header, expectedIssuer string) (Identity, bool) {
+// Authenticate returns one exact OIDC identity from the configured trusted boundary.
+func Authenticate(
+	headers http.Header,
+	expectedIssuer string,
+	mode config.TrustedIdentityMode,
+	expectedAzureTenantID string,
+) (Identity, bool) {
+	switch mode {
+	case config.TrustedIdentityModeOIDCHeaders:
+		if expectedAzureTenantID != "" || hasAzureContainerAppsIdentityHeaders(headers) {
+			return Identity{}, false
+		}
+		return authenticateOIDCHeaders(headers, expectedIssuer)
+	case config.TrustedIdentityModeAzureContainerApps:
+		if len(headers.Values(IssuerHeader)) != 0 || len(headers.Values(SubjectHeader)) != 0 {
+			return Identity{}, false
+		}
+		return authenticateAzureContainerApps(headers, expectedIssuer, expectedAzureTenantID)
+	default:
+		return Identity{}, false
+	}
+}
+
+func authenticateOIDCHeaders(headers http.Header, expectedIssuer string) (Identity, bool) {
 	if !config.IsValidOIDCIssuer(expectedIssuer) {
 		return Identity{}, false
 	}

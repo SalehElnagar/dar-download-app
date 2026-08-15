@@ -37,13 +37,17 @@ paths:
       summary: Download one exact release authorized for the authenticated OIDC subject
       security:
         - upstreamOIDC: []
-      x-trusted-boundary-headers:
+      x-trusted-identity-boundary:
         description: >-
-          Internal trusted-boundary inputs from the OIDC layer, never public credentials or
-          caller-controlled request parameters. Direct app ingress is forbidden.
-        required:
-          - X-DAR-OIDC-Issuer
-          - X-DAR-OIDC-Subject
+          One deployment-selected internal adapter maps authenticated upstream evidence to the
+          application's exact issuer and subject. The default adapter uses X-DAR-OIDC-Issuer and
+          X-DAR-OIDC-Subject on private ingress. The optional Azure Container Apps adapter uses
+          only platform-reserved principal headers and rejects caller X-DAR assertions. These
+          internal representations are never public credentials or caller-controlled request
+          parameters, and direct app ingress is forbidden.
+        modes:
+          - oidc_headers
+          - azure_container_apps
       parameters:
         - name: release_id
           in: path
@@ -134,7 +138,7 @@ components:
       description: >-
         External authentication requirement enforced by the trusted upstream OIDC layer. The
         layer may use a browser session or validate a bearer token. The app never processes
-        this public credential, and clients must not send the internal X-DAR identity headers.
+        this public credential. Clients must not send or rely on any internal identity headers.
   schemas:
     Health:
       type: object

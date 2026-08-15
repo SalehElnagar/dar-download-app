@@ -21,7 +21,12 @@ func TestAuthenticateAcceptsOneExactOIDCIdentity(t *testing.T) {
 
 	issuer := "https://identity.example.com/realms/customers/"
 	subject := "customer:Case-Sensitive-001"
-	identity, ok := auth.Authenticate(oidcHeaders(issuer, subject), issuer)
+	identity, ok := auth.Authenticate(
+		oidcHeaders(issuer, subject),
+		issuer,
+		config.TrustedIdentityModeOIDCHeaders,
+		"",
+	)
 	if !ok || identity.Issuer != issuer || identity.Subject != subject {
 		t.Fatalf("Authenticate() = %#v, %t", identity, ok)
 	}
@@ -57,7 +62,12 @@ func TestAuthenticateRejectsAmbiguousOrUntrustedOIDCInputs(t *testing.T) {
 			if name == "invalid expected URL" {
 				expected = "http://identity.example.com"
 			}
-			if identity, ok := auth.Authenticate(headers, expected); ok {
+			if identity, ok := auth.Authenticate(
+				headers,
+				expected,
+				config.TrustedIdentityModeOIDCHeaders,
+				"",
+			); ok {
 				t.Fatalf("Authenticate() = %#v, true; want rejection", identity)
 			}
 		})
@@ -71,7 +81,12 @@ func TestProviderSpecificIdentityHeadersHaveNoAlias(t *testing.T) {
 	headers := make(http.Header)
 	headers.Set(legacyHeader, "synthetic")
 	headers.Set(legacyHeader+"-ID", "customer:legacy")
-	if identity, ok := auth.Authenticate(headers, "https://identity.example.com"); ok {
+	if identity, ok := auth.Authenticate(
+		headers,
+		"https://identity.example.com",
+		config.TrustedIdentityModeOIDCHeaders,
+		"",
+	); ok {
 		t.Fatalf("Authenticate() = %#v, true; want rejection", identity)
 	}
 }

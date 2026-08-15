@@ -11,16 +11,16 @@ owned by the platform repository.
 
 1. An untrusted external client reaches the approved HTTPS authentication endpoint.
 2. The trusted OIDC layer completes or validates the browser-session or bearer flow.
-3. That layer strips caller-supplied identity headers and injects exactly one issuer and subject
-   header on private ingress.
+3. One configured adapter maps trusted evidence into exactly one issuer and subject: either a
+   stripped generic header pair or a tenant-bound Azure Container Apps principal.
 4. The Go service exact-matches the configured issuer and the selected release's allowed subject
    before any storage operation.
 5. The service obtains a storage token for one dedicated user-assigned identity.
 6. Private networking carries ETag-bound reads to the fixed Blob account and container.
 7. GitHub Actions converts reviewed source into an immutable signed image and evidence.
 
-The internal identity-header boundary is safe only when the trusted layer strips caller values,
-prevents duplicates, and blocks all direct access to application ingress.
+The internal identity boundary is safe only when the trusted layer rejects caller values,
+prevents duplicates, selects one adapter, and blocks all direct access to application ingress.
 
 ## Attacker capabilities and controls
 
@@ -28,6 +28,8 @@ prevents duplicates, and blocks all direct access to application ingress.
 | --- | --- | --- |
 | Forward a download link | Exact authenticated subject allowlist per opaque release | An authorized recipient can redistribute bytes after download |
 | Forge internal identity headers | Header stripping, private ingress, exactly-one checks, bounded values | A compromised or bypassed trusted layer can impersonate users |
+| Mix generic and Azure identity modes | Explicit startup mode and cross-mode header rejection | A wrong mode causes denial until configuration is corrected |
+| Substitute an Azure tenant or principal | Exact Entra v2 issuer/tenant binding, canonical object ID, duplicate rejection, and equality between claim and platform ID header | A compromised Container Apps auth sidecar remains authoritative inside its boundary |
 | Substitute the issuer or vary a trailing slash | HTTPS issuer validation and byte-exact match to startup policy | A misconfigured upstream can deny valid requests or assert the configured issuer incorrectly |
 | Reuse the same subject under another issuer | Issuer and subject are validated as one pair before authorization | Upstream compromise remains authoritative inside its boundary |
 | Smuggle duplicate issuer or subject values | Both header value lists must contain exactly one entry | A non-conforming intermediary that rewrites field semantics can cause denial |
@@ -42,6 +44,8 @@ prevents duplicates, and blocks all direct access to application ingress.
 ## Security invariants
 
 - Authentication is necessary but never sufficient for a download.
+- Exactly one trusted-identity adapter is active, and both adapters produce the same internal
+  issuer-and-subject authorization input.
 - Every denial that can be decided locally occurs before any storage operation.
 - Customer input never selects an account, container, Blob path, credential, or filename.
 - The service obtains only Blob read authority and never returns a storage URL or SAS.
