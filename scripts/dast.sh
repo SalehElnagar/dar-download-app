@@ -10,8 +10,19 @@ network="dar-download-dast-$suffix"
 app_container="dar-download-dast-app-$suffix"
 zap_image="ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef"
 release_policy='{"dar_01JABCDEF0123456789XYZ":{"allowed_principal_ids":["33333333-3333-4333-8333-333333333333"],"blob_name":"releases/synthetic/example.dar","download_name":"example.dar"}}'
+report_files=(
+  "$evidence_dir/zap-report.json"
+  "$evidence_dir/zap-report.html"
+  "$evidence_dir/zap-report.md"
+)
+
+restore_report_permissions() {
+  chmod 0700 "$evidence_dir"
+  chmod 0600 "${report_files[@]}"
+}
 
 cleanup() {
+  restore_report_permissions >/dev/null 2>&1 || true
   docker rm -f "$app_container" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
 }
@@ -63,6 +74,14 @@ if [[ "$status" != "401" ]]; then
   exit 1
 fi
 
+for report_file in "${report_files[@]}"; do
+  if [[ -L "$report_file" || (-e "$report_file" && ! -f "$report_file") ]]; then
+    printf 'DAST report path is not a regular file: %s\n' "$report_file" >&2
+    exit 1
+  fi
+  install -m 0666 /dev/null "$report_file"
+done
+chmod 0711 "$evidence_dir"
 docker run --rm \
   --network "$network" \
   --volume "$repo_root/api:/zap/api:ro" \
@@ -80,5 +99,6 @@ docker run --rm \
   -r zap-report.html \
   -w zap-report.md \
   -s
+restore_report_permissions
 
 printf '%s\n' "local DAST completed without a release-blocking finding."

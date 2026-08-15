@@ -72,6 +72,20 @@ if ! grep -Fq "docker network create --internal \"\$network\"" scripts/dast.sh |
   printf '%s\n' "DAST is not offline, deterministic, and fail-closed on warnings." >&2
   exit 1
 fi
+# GitHub Actions run 31900648575 exposed a Linux bind-mount permission mismatch.
+report_prepare_line=$(grep -nF "install -m 0666 /dev/null \"\$report_file\"" scripts/dast.sh | cut -d: -f1)
+report_scan_line=$(grep -n '^[[:space:]]*zap-api-scan\.py' scripts/dast.sh | cut -d: -f1)
+report_restore_line=$(grep -n '^[[:space:]]*restore_report_permissions$' scripts/dast.sh | tail -n 1 | cut -d: -f1)
+if ! grep -Fq "chmod 0711 \"\$evidence_dir\"" scripts/dast.sh ||
+  ! grep -Fq "chmod 0600 \"\${report_files[@]}\"" scripts/dast.sh ||
+  ! grep -Fq "chmod 0700 \"\$evidence_dir\"" scripts/dast.sh ||
+  [[ -z "$report_prepare_line" || -z "$report_scan_line" || -z "$report_restore_line" ]] ||
+  [[ "$report_prepare_line" -ge "$report_scan_line" || "$report_restore_line" -le "$report_scan_line" ]] ||
+  [[ $(grep -Ec '^[[:space:]]*restore_report_permissions([[:space:]]|$)' scripts/dast.sh) -lt 2 ]] ||
+  grep -Eq 'chmod[[:space:]]+(0777|a\+rwx)' scripts/dast.sh; then
+  printf '%s\n' "DAST report files are not narrowly writable during the container scan and restrictive afterward." >&2
+  exit 1
+fi
 if [[ $(grep -c -- '-fuzztime=100000x' scripts/prebuild.sh) != "3" ]] ||
   grep -Eq -- '-fuzztime=[0-9]+s' scripts/prebuild.sh; then
   printf '%s\n' "pre-build fuzzing is not bound to the deterministic iteration budget." >&2
