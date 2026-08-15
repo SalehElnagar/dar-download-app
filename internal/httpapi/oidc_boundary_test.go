@@ -49,9 +49,6 @@ func newAzureBoundaryHandler(t *testing.T, storage *testsupport.Storage) http.Ha
 		config.StorageAccountNameEnv:         "stdardownloadpoc01",
 		config.StorageContainerEnv:           "dar-releases",
 		config.ManagedIdentityClientIDEnv:    managedIdentityID,
-		config.ReleasesJSONEnv: `{"dar_01JABCDEF0123456789XYZ":{` +
-			`"allowed_subjects":["` + azureBoundarySubject + `"],` +
-			`"blob_name":"` + blobName + `","download_name":"example.dar"}}`,
 	})
 	if err != nil {
 		t.Fatalf("config.ParseEnvironment() error = %v", err)
@@ -72,10 +69,10 @@ func TestOIDCIdentityMismatchesDenyBeforeStorage(t *testing.T) {
 			status:  http.StatusUnauthorized,
 			code:    "authentication_required",
 		},
-		"subject case": {
-			headers: testsupport.OIDCHeaders(oidcIssuer, strings.ToLower(allowedSubject)),
-			status:  http.StatusForbidden,
-			code:    "authorization_denied",
+		"oversized subject": {
+			headers: testsupport.OIDCHeaders(oidcIssuer, strings.Repeat("s", config.MaxOIDCSubjectBytes+1)),
+			status:  http.StatusUnauthorized,
+			code:    "authentication_required",
 		},
 		"platform principal mixed with valid generic identity": {
 			headers: func() http.Header {
@@ -96,7 +93,7 @@ func TestOIDCIdentityMismatchesDenyBeforeStorage(t *testing.T) {
 				t,
 				newHandler(t, storage),
 				http.MethodGet,
-				"/v1/releases/"+releaseID+"/download",
+				downloadPath,
 				testCase.headers,
 			)
 			assertJSONError(t, recorder, testCase.status, testCase.code)
@@ -108,25 +105,35 @@ func TestOIDCIdentityMismatchesDenyBeforeStorage(t *testing.T) {
 	}
 }
 
-func TestAzureContainerAppsIdentityAuthorizesAndDeniesBeforeStorage(t *testing.T) {
+func TestAzureContainerAppsAcceptsAnyCanonicalIdentity(t *testing.T) {
 	t.Parallel()
 
-	t.Run("authorized object ID", func(t *testing.T) {
-		t.Parallel()
-		storage := &testsupport.Storage{Objects: map[string]testsupport.Object{
-			blobName: {Data: []byte("dar"), ETag: `"etag-v1"`},
-		}}
-		recorder := request(
-			t,
-			newAzureBoundaryHandler(t, storage),
-			http.MethodGet,
-			"/v1/releases/"+releaseID+"/download",
-			azureBoundaryHeaders(t, azureBoundaryTenant, azureBoundarySubject),
-		)
-		if recorder.Code != http.StatusOK || recorder.Body.String() != "dar" {
-			t.Fatalf("response = %d %q", recorder.Code, recorder.Body.String())
-		}
-	})
+	for name, subject := range map[string]string{
+		"first canonical object ID":     azureBoundarySubject,
+		"different canonical object ID": "22222222-2222-4222-8222-222222222222",
+	} {
+		name, subject := name, subject
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			storage := &testsupport.Storage{Objects: map[string]testsupport.Object{
+				blobName: {Data: []byte("dar"), ETag: `"etag-v1"`},
+			}}
+			recorder := request(
+				t,
+				newAzureBoundaryHandler(t, storage),
+				http.MethodGet,
+				downloadPath,
+				azureBoundaryHeaders(t, azureBoundaryTenant, subject),
+			)
+			if recorder.Code != http.StatusOK || recorder.Body.String() != "dar" {
+				t.Fatalf("response = %d %q", recorder.Code, recorder.Body.String())
+			}
+		})
+	}
+}
+
+func TestAzureContainerAppsIdentityMismatchesDenyBeforeStorage(t *testing.T) {
+	t.Parallel()
 
 	tests := map[string]struct {
 		headers http.Header
@@ -138,10 +145,10 @@ func TestAzureContainerAppsIdentityAuthorizesAndDeniesBeforeStorage(t *testing.T
 			status:  http.StatusUnauthorized,
 			code:    "authentication_required",
 		},
-		"unlisted object ID": {
-			headers: azureBoundaryHeaders(t, azureBoundaryTenant, "22222222-2222-4222-8222-222222222222"),
-			status:  http.StatusForbidden,
-			code:    "authorization_denied",
+		"invalid object ID": {
+			headers: azureBoundaryHeaders(t, azureBoundaryTenant, "not-a-canonical-object-id"),
+			status:  http.StatusUnauthorized,
+			code:    "authentication_required",
 		},
 		"caller generic assertion": {
 			headers: func() http.Header {
@@ -163,7 +170,7 @@ func TestAzureContainerAppsIdentityAuthorizesAndDeniesBeforeStorage(t *testing.T
 				t,
 				newAzureBoundaryHandler(t, storage),
 				http.MethodGet,
-				"/v1/releases/"+releaseID+"/download",
+				downloadPath,
 				testCase.headers,
 			)
 			assertJSONError(t, recorder, testCase.status, testCase.code)

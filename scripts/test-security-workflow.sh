@@ -88,8 +88,19 @@ if ! grep -Fq "chmod 0711 \"\$evidence_dir\"" scripts/dast.sh ||
   exit 1
 fi
 if [[ $(grep -c -- '-fuzztime=100000x' scripts/prebuild.sh) != "4" ]] ||
-  grep -Eq -- '-fuzztime=[0-9]+s' scripts/prebuild.sh; then
+  grep -Eq -- '-fuzztime=[0-9]+s' scripts/prebuild.sh ||
+  ! grep -Fq -- '-fuzz=FuzzDownloadTarget' scripts/prebuild.sh ||
+  grep -Fq -- '-fuzz=FuzzParseEnvironmentPolicy' scripts/prebuild.sh; then
   printf '%s\n' "pre-build fuzzing is not bound to the deterministic iteration budget." >&2
+  exit 1
+fi
+
+if ! grep -Fq '/v1/releases/{version}/download/{file_name}:' api/openapi.yaml ||
+  grep -Fq '/v1/releases/{release_id}/download:' api/openapi.yaml ||
+  grep -Fq 'authorization_denied' api/openapi.yaml ||
+  grep -Fq 'DAR_DOWNLOAD_RELEASES_JSON' scripts/dast.sh ||
+  ! grep -Fq '/v1/releases/v26.8.31.01/download/canton_dars.zip' scripts/dast.sh; then
+  printf '%s\n' "dynamic authenticated download contract is not enforced by API and DAST controls." >&2
   exit 1
 fi
 

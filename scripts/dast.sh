@@ -9,7 +9,6 @@ suffix=$$
 network="dar-download-dast-$suffix"
 app_container="dar-download-dast-app-$suffix"
 zap_image="ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef"
-release_policy='{"dar_01JABCDEF0123456789XYZ":{"allowed_subjects":["customer:synthetic-001"],"blob_name":"releases/synthetic/example.dar","download_name":"example.dar"}}'
 report_files=(
   "$evidence_dir/zap-report.json"
   "$evidence_dir/zap-report.html"
@@ -44,7 +43,6 @@ docker run -d \
   --env DAR_DOWNLOAD_STORAGE_ACCOUNT_NAME=stdardownloadpoc01 \
   --env DAR_DOWNLOAD_STORAGE_CONTAINER=dar-releases \
   --env DAR_DOWNLOAD_MANAGED_IDENTITY_CLIENT_ID=22222222-2222-4222-8222-222222222222 \
-  --env "DAR_DOWNLOAD_RELEASES_JSON=$release_policy" \
   "$image_ref" >/dev/null
 
 target_url="http://$app_container:8000"
@@ -68,7 +66,7 @@ status=$(docker run --rm \
   --entrypoint curl \
   "$zap_image" \
   --silent --output /dev/null --write-out '%{http_code}' \
-  "$target_url/v1/releases/dar_01JABCDEF0123456789XYZ/download")
+  "$target_url/v1/releases/v26.8.31.01/download/canton_dars.zip")
 if [[ "$status" != "401" ]]; then
   printf 'unauthenticated container response was %s, want 401\n' "$status" >&2
   exit 1

@@ -17,11 +17,11 @@ import (
 )
 
 const (
-	downloadPrefix = "/v1/releases/"
-	downloadSuffix = "/download"
+	maxVersionBytes  = 96
+	maxFileNameBytes = 128
 )
 
-// Handler authenticates, authorizes, selects, and streams exact release objects.
+// Handler authenticates callers, selects exact path-derived objects, and streams them.
 type Handler struct {
 	config config.Config
 	store  blob.Store
@@ -49,12 +49,12 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		return
 	}
 
-	releaseID, matches := releaseIDFromPath(request.URL.Path)
+	target, matches := downloadTargetFromRequest(request)
 	if !matches {
 		writeJSON(writer, http.StatusNotFound, "release_not_found")
 		return
 	}
-	identity, authenticated := auth.Authenticate(
+	_, authenticated := auth.Authenticate(
 		request.Header,
 		handler.config.OIDCIssuer,
 		handler.config.TrustedIdentityMode,
@@ -64,17 +64,7 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		writeJSON(writer, http.StatusUnauthorized, "authentication_required")
 		return
 	}
-	release, found := handler.config.Release(releaseID)
-	if !found {
-		writeJSON(writer, http.StatusNotFound, "release_not_found")
-		return
-	}
-	if !release.Allows(identity.Subject) {
-		writeJSON(writer, http.StatusForbidden, "authorization_denied")
-		return
-	}
-
-	snapshot, err := handler.store.Stat(request.Context(), release.BlobName)
+	snapshot, err := handler.store.Stat(request.Context(), target.blobName)
 	if err != nil {
 		handler.writeStorageError(writer, request.Context(), err)
 		return
@@ -95,18 +85,32 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		writeJSON(writer, http.StatusRequestedRangeNotSatisfiable, "invalid_range")
 		return
 	}
-	handler.stream(writer, request, release, snapshot, selection)
+	handler.stream(writer, request, selectedDownload{
+		target:    target,
+		snapshot:  snapshot,
+		selection: selection,
+	})
+}
+
+type downloadTarget struct {
+	blobName string
+	fileName string
+}
+
+type selectedDownload struct {
+	target    downloadTarget
+	snapshot  blob.Snapshot
+	selection download.Selection
 }
 
 func (handler *Handler) stream(
 	writer http.ResponseWriter,
 	request *http.Request,
-	release config.ReleasePolicy,
-	snapshot blob.Snapshot,
-	selection download.Selection,
+	selected selectedDownload,
 ) {
+	selection := selected.selection
 	if selection.Length == 0 {
-		setDownloadHeaders(writer.Header(), release, snapshot, selection)
+		setDownloadHeaders(writer.Header(), selected)
 		writer.WriteHeader(http.StatusOK)
 		return
 	}
@@ -114,17 +118,17 @@ func (handler *Handler) stream(
 	firstLength := min(selection.Length, config.MaxStorageSegment)
 	reader, err := handler.store.OpenRange(
 		request.Context(),
-		release.BlobName,
+		selected.target.blobName,
 		selection.Offset,
 		firstLength,
-		snapshot.ETag,
+		selected.snapshot.ETag,
 	)
 	if err != nil {
 		handler.writeStorageError(writer, request.Context(), err)
 		return
 	}
 
-	setDownloadHeaders(writer.Header(), release, snapshot, selection)
+	setDownloadHeaders(writer.Header(), selected)
 	status := http.StatusOK
 	if selection.Partial {
 		status = http.StatusPartialContent
@@ -142,7 +146,7 @@ func (handler *Handler) stream(
 		}
 		length := min(remaining, config.MaxStorageSegment)
 		reader, openErr := handler.store.OpenRange(
-			request.Context(), release.BlobName, offset, length, snapshot.ETag,
+			request.Context(), selected.target.blobName, offset, length, selected.snapshot.ETag,
 		)
 		if openErr != nil {
 			handler.logStreamFailure()
@@ -189,35 +193,58 @@ func (handler *Handler) logStreamFailure() {
 	handler.logger.Warn("download stream terminated", "event", "stream_failure")
 }
 
-func releaseIDFromPath(path string) (string, bool) {
-	if !strings.HasPrefix(path, downloadPrefix) || !strings.HasSuffix(path, downloadSuffix) {
-		return "", false
+func downloadTargetFromRequest(request *http.Request) (downloadTarget, bool) {
+	if request.URL == nil || request.URL.Opaque != "" || request.URL.RawPath != "" ||
+		request.URL.RawQuery != "" || request.URL.ForceQuery ||
+		strings.Contains(request.RequestURI, "%") {
+		return downloadTarget{}, false
 	}
-	releaseID := strings.TrimSuffix(strings.TrimPrefix(path, downloadPrefix), downloadSuffix)
-	if !config.IsReleaseID(releaseID) {
-		return "", false
+	parts := strings.Split(request.URL.Path, "/")
+	if len(parts) != 6 || parts[0] != "" || parts[1] != "v1" ||
+		parts[2] != "releases" || parts[4] != "download" ||
+		!validDownloadSegment(parts[3], maxVersionBytes) ||
+		!validDownloadSegment(parts[5], maxFileNameBytes) {
+		return downloadTarget{}, false
 	}
-	return releaseID, true
+	return downloadTarget{
+		blobName: parts[3] + "/" + parts[5],
+		fileName: parts[5],
+	}, true
+}
+
+func validDownloadSegment(value string, maximumBytes int) bool {
+	if value == "" || len(value) > maximumBytes || strings.Trim(value, ".") == "" {
+		return false
+	}
+	for index := 0; index < len(value); index++ {
+		character := value[index]
+		if (character < 'A' || character > 'Z') &&
+			(character < 'a' || character > 'z') &&
+			(character < '0' || character > '9') &&
+			character != '.' && character != '_' && character != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 func setDownloadHeaders(
 	headers http.Header,
-	release config.ReleasePolicy,
-	snapshot blob.Snapshot,
-	selection download.Selection,
+	selected selectedDownload,
 ) {
+	selection := selected.selection
 	headers.Set("Accept-Ranges", "bytes")
 	headers.Set("Cache-Control", "private, no-store")
-	headers.Set("Content-Disposition", `attachment; filename="`+release.DownloadName+`"`)
+	headers.Set("Content-Disposition", `attachment; filename="`+selected.target.fileName+`"`)
 	headers.Set("Content-Length", strconv.FormatInt(selection.Length, 10))
 	headers.Set("Content-Type", "application/octet-stream")
-	headers.Set("ETag", snapshot.ETag)
+	headers.Set("ETag", selected.snapshot.ETag)
 	if selection.Partial && selection.Range != nil {
 		headers.Set(
 			"Content-Range",
 			"bytes "+strconv.FormatInt(selection.Range.Start, 10)+"-"+
 				strconv.FormatInt(selection.Range.End, 10)+"/"+
-				strconv.FormatInt(snapshot.Size, 10),
+				strconv.FormatInt(selected.snapshot.Size, 10),
 		)
 	}
 }

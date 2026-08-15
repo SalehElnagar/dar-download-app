@@ -43,7 +43,7 @@ broad suppressions, and exceptions for secret findings are forbidden.
 
 For a suspected compromise:
 
-1. Stop promotion and disable the affected application revision or release mapping.
+1. Stop promotion and disable the affected application revision.
 2. Revoke the workload identity's Blob role if storage authority may be compromised.
 3. Preserve image digest, SBOM, attestations, audit logs, and gate evidence.
 4. Patch and rebuild from reviewed source; rerun every source and image gate.

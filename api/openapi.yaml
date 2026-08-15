@@ -1,14 +1,16 @@
 openapi: 3.0.3
 info:
   title: DAR Download Application
-  version: 2.0.0
+  version: 3.0.0
   description: >-
-    Private service behind a separately deployed OIDC authentication layer. External clients
-    authenticate there with a browser session or bearer flow. That trusted layer validates the
-    login or token, strips caller-supplied identity headers, and injects the internal identity
-    inputs on private app ingress. The application does not implement the browser authorization
-    flow or validate customer session or bearer tokens. Every non-GET method receives a bounded
-    405 method_not_allowed response.
+    Private streaming service behind a separately deployed OIDC authentication layer. External
+    clients authenticate there with a browser session or bearer flow. That trusted layer
+    validates the login or token, strips caller-supplied identity headers, and injects the
+    deployment-selected internal identity representation on private app ingress. The app does
+    not implement a browser authorization flow or validate customer session or bearer tokens.
+    Every authenticated identity may download every valid exact Blob path in the configured
+    container. File and version names are selectors, not authorization boundaries. Every
+    non-GET method receives a bounded 405 method_not_allowed response.
 servers:
   - url: https://downloads.example.invalid
     description: >-
@@ -31,31 +33,55 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Health"
-  /v1/releases/{release_id}/download:
+  /v1/releases/{version}/download/{file_name}:
     get:
-      operationId: downloadRelease
-      summary: Download one exact release authorized for the authenticated OIDC subject
+      operationId: downloadReleaseFile
+      summary: Download one exact Blob selected by two validated path segments
+      description: >-
+        After trusted authentication, maps the raw version and file_name segments exactly to
+        version/file_name in the configured container. The app does not list or enumerate the
+        container. Percent-encoded, nested, Unicode, control-character, and ambiguous path forms
+        are rejected. Authentication occurs before any Blob existence check.
       security:
         - upstreamOIDC: []
       x-trusted-identity-boundary:
         description: >-
           One deployment-selected internal adapter maps authenticated upstream evidence to the
-          application's exact issuer and subject. The default adapter uses X-DAR-OIDC-Issuer and
-          X-DAR-OIDC-Subject on private ingress. The optional Azure Container Apps adapter uses
-          only platform-reserved principal headers and rejects caller X-DAR assertions. These
-          internal representations are never public credentials or caller-controlled request
-          parameters, and direct app ingress is forbidden.
+          application's configured issuer and one authenticated subject. The default adapter
+          uses X-DAR-OIDC-Issuer and X-DAR-OIDC-Subject on private ingress. The optional Azure
+          Container Apps adapter uses only platform-reserved principal headers and rejects caller
+          X-DAR assertions. These internal representations are never public credentials or
+          caller-controlled request parameters, and direct app ingress is forbidden. No
+          subject-level authorization is performed after authentication.
         modes:
           - oidc_headers
           - azure_container_apps
       parameters:
-        - name: release_id
+        - name: version
           in: path
           required: true
-          example: dar_01JABCDEF0123456789XYZ
+          description: >-
+            Raw 1-to-96-byte ASCII segment. Letters, digits, dot, underscore, and hyphen are
+            allowed, but a dot-only value is not. Percent encoding is rejected.
+          example: v26.8.31.01
           schema:
             type: string
-            pattern: ^dar_[A-Za-z0-9_-]{16,96}$
+            minLength: 1
+            maxLength: 96
+            pattern: '^[.]*[A-Za-z0-9_-][A-Za-z0-9._-]*$'
+        - name: file_name
+          in: path
+          required: true
+          description: >-
+            Raw 1-to-128-byte safe ASCII basename. Letters, digits, dot, underscore, and hyphen
+            are allowed, but a dot-only value is not. Percent encoding is rejected. The filename
+            is not an authorization boundary.
+          example: canton_dars.zip
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+            pattern: '^[.]*[A-Za-z0-9_-][A-Za-z0-9._-]*$'
         - name: Range
           in: header
           required: false
@@ -71,23 +97,7 @@ paths:
             maxLength: 128
       responses:
         "200":
-          description: Complete current DAR representation
-          headers:
-            Accept-Ranges:
-              schema: { type: string, enum: [bytes] }
-            Cache-Control:
-              schema: { type: string, enum: ["private, no-store"] }
-            Content-Disposition:
-              schema: { type: string }
-            Content-Length:
-              schema: { type: integer, minimum: 0 }
-            ETag:
-              schema: { type: string }
-          content:
-            application/octet-stream:
-              schema: { type: string, format: binary }
-        "206":
-          description: One normalized byte range from the current DAR representation
+          description: Complete current Blob representation
           headers:
             Accept-Ranges:
               schema: { type: string, enum: [bytes] }
@@ -96,7 +106,27 @@ paths:
             Content-Disposition:
               schema:
                 type: string
-                pattern: '^attachment; filename="[A-Za-z0-9._-]+[.]dar"$'
+                pattern: '^attachment; filename="[.]*[A-Za-z0-9_-][A-Za-z0-9._-]*"$'
+            Content-Length:
+              schema: { type: integer, minimum: 0 }
+            ETag:
+              schema: { type: string }
+            X-Content-Type-Options:
+              schema: { type: string, enum: [nosniff] }
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "206":
+          description: One normalized byte range from the current Blob representation
+          headers:
+            Accept-Ranges:
+              schema: { type: string, enum: [bytes] }
+            Cache-Control:
+              schema: { type: string, enum: ["private, no-store"] }
+            Content-Disposition:
+              schema:
+                type: string
+                pattern: '^attachment; filename="[.]*[A-Za-z0-9_-][A-Za-z0-9._-]*"$'
             Content-Range:
               schema: { type: string }
             Content-Length:
@@ -110,8 +140,6 @@ paths:
               schema: { type: string, format: binary }
         "401":
           $ref: "#/components/responses/AuthenticationRequired"
-        "403":
-          $ref: "#/components/responses/AuthorizationDenied"
         "404":
           $ref: "#/components/responses/ReleaseNotFound"
         "413":
@@ -137,8 +165,8 @@ components:
       openIdConnectUrl: https://identity.example.invalid/.well-known/openid-configuration
       description: >-
         External authentication requirement enforced by the trusted upstream OIDC layer. The
-        layer may use a browser session or validate a bearer token. The app never processes
-        this public credential. Clients must not send or rely on any internal identity headers.
+        layer may use a browser session or validate a bearer token. The app never processes this
+        public credential. Clients must not send or rely on internal identity headers.
   schemas:
     Health:
       type: object
@@ -156,7 +184,6 @@ components:
           type: string
           enum:
             - authentication_required
-            - authorization_denied
             - invalid_range
             - method_not_allowed
             - release_not_found
@@ -169,26 +196,20 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
           example: { error: authentication_required }
-    AuthorizationDenied:
-      description: The exact OIDC subject is not entitled to this exact release
-      content:
-        application/json:
-          schema: { $ref: "#/components/schemas/Error" }
-          example: { error: authorization_denied }
     ReleaseNotFound:
-      description: The configured release or current object does not exist
+      description: A path segment is invalid or the exact selected Blob does not exist
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
           example: { error: release_not_found }
     ReleaseTooLarge:
-      description: The current object exceeds the fixed delivery bound
+      description: The current Blob exceeds the fixed delivery bound
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
           example: { error: release_too_large }
     StorageUnavailable:
-      description: Private storage could not safely deliver the current object
+      description: Private storage could not safely deliver the current Blob
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

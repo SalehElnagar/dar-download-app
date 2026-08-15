@@ -110,11 +110,10 @@ func TestCanonicalContractDescribesBothApplicationRoutes(t *testing.T) {
 	paths := []string{filepath.Join(root, "api", "openapi.yaml")}
 	required := []string{
 		"/healthz:",
-		"/v1/releases/{release_id}/download:",
+		"/v1/releases/{version}/download/{file_name}:",
 		"'200'",
 		"'206'",
 		"'401'",
-		"'403'",
 		"'404'",
 		"method_not_allowed",
 		"'413'",
@@ -130,6 +129,14 @@ func TestCanonicalContractDescribesBothApplicationRoutes(t *testing.T) {
 		for _, fragment := range required {
 			if !strings.Contains(text, fragment) {
 				t.Errorf("%s is missing contract fragment %q", path, fragment)
+			}
+		}
+		for _, retired := range []string{
+			"/v1/releases/{release_" + "id}/download:",
+			"authorization_" + "denied",
+		} {
+			if strings.Contains(text, retired) {
+				t.Errorf("%s contains retired contract fragment %q", path, retired)
 			}
 		}
 	}

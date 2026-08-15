@@ -111,6 +111,8 @@ func TestTrackedContractsDescribeProviderNeutralBoundary(t *testing.T) {
 			"azure_container_apps",
 			"never public credentials",
 			"trusted OIDC-protected upstream endpoint",
+			"/v1/releases/{version}/download/{file_name}",
+			"subject-level authorization",
 			`^bytes=(?:[0-9]+-[0-9]*|-[1-9][0-9]*)$`,
 			"dar-download",
 		},
@@ -120,7 +122,8 @@ func TestTrackedContractsDescribeProviderNeutralBoundary(t *testing.T) {
 			"DAR_DOWNLOAD_AZURE_CONTAINER_APPS_TENANT_ID",
 			"X-DAR-OIDC-Issuer",
 			"X-DAR-OIDC-Subject",
-			"allowed_subjects",
+			"DAR_DOWNLOAD_RELEASES_JSON",
+			"every successfully authenticated identity",
 		},
 		"docs/operations.md": {
 			"/.auth/login/aad/callback",
@@ -135,6 +138,33 @@ func TestTrackedContractsDescribeProviderNeutralBoundary(t *testing.T) {
 		for _, required := range requiredFragments {
 			if !strings.Contains(text, strings.ToLower(required)) {
 				t.Errorf("%s is missing %q", relative, required)
+			}
+		}
+	}
+}
+
+func TestPublishedContractsExcludeRetiredStaticAuthorization(t *testing.T) {
+	root := repositoryRoot(t)
+	targets := []string{
+		"README.md",
+		"api/openapi.yaml",
+		"docs/assurance-map.md",
+		"docs/configuration.md",
+		"docs/operations.md",
+		"docs/threat-model.md",
+	}
+	for _, relative := range targets {
+		content, err := os.ReadFile(filepath.Join(root, relative))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, retired := range []string{
+			"allowed_" + "subjects",
+			"authorization_" + "denied",
+			"/v1/releases/{release_" + "id}/download",
+		} {
+			if strings.Contains(string(content), retired) {
+				t.Errorf("%s contains retired static authorization fragment %q", relative, retired)
 			}
 		}
 	}

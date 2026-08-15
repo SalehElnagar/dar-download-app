@@ -20,7 +20,6 @@ import (
 const (
 	testOIDCIssuer        = "https://identity.example.com/realms/customers/"
 	testManagedIdentityID = "22222222-2222-4222-8222-222222222222"
-	testAllowedSubject    = "customer:Case-Sensitive-001"
 	testBlobName          = "releases/2026-08/example.dar"
 )
 
@@ -77,9 +76,6 @@ func testConfig(t *testing.T) config.Config {
 		config.StorageAccountNameEnv:      "stdardownloadpoc01",
 		config.StorageContainerEnv:        "dar-releases",
 		config.ManagedIdentityClientIDEnv: testManagedIdentityID,
-		config.ReleasesJSONEnv: `{"dar_01JABCDEF0123456789XYZ":{` +
-			`"allowed_subjects":["` + testAllowedSubject + `"],` +
-			`"blob_name":"` + testBlobName + `","download_name":"example.dar"}}`,
 	})
 	if err != nil {
 		t.Fatalf("config.ParseEnvironment() error = %v", err)

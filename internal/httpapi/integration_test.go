@@ -29,7 +29,7 @@ func TestThirtyMiBDownloadAndResumeOverHTTP(t *testing.T) {
 	client := server.Client()
 	fullRequest, err := http.NewRequest(
 		http.MethodGet,
-		server.URL+"/v1/releases/"+releaseID+"/download",
+		server.URL+downloadPath,
 		nil,
 	)
 	if err != nil {
@@ -61,7 +61,7 @@ func TestThirtyMiBDownloadAndResumeOverHTTP(t *testing.T) {
 	resumeOffset := int64(17*1024*1024 + 123)
 	rangeRequest, err := http.NewRequest(
 		http.MethodGet,
-		server.URL+"/v1/releases/"+releaseID+"/download",
+		server.URL+downloadPath,
 		nil,
 	)
 	if err != nil {

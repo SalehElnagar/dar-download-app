@@ -23,10 +23,11 @@ const (
 	oidcIssuer        = "https://identity.example.com/realms/customers/"
 	managedIdentityID = "22222222-2222-4222-8222-222222222222"
 	allowedSubject    = "customer:Case-Sensitive-001"
-	otherSubject      = "customer:other-002"
 	releaseID         = "dar_01JABCDEF0123456789XYZ"
-	unknownReleaseID  = "dar_01JUNKNOWN0123456789X"
-	blobName          = "releases/2026-08/example.dar"
+	version           = "v26.8.31.01"
+	fileName          = "example.dar"
+	blobName          = version + "/" + fileName
+	downloadPath      = "/v1/releases/" + version + "/download/" + fileName
 )
 
 func testConfig(t *testing.T) config.Config {
@@ -36,9 +37,6 @@ func testConfig(t *testing.T) config.Config {
 		config.StorageAccountNameEnv:      "stdardownloadpoc01",
 		config.StorageContainerEnv:        "dar-releases",
 		config.ManagedIdentityClientIDEnv: managedIdentityID,
-		config.ReleasesJSONEnv: `{"dar_01JABCDEF0123456789XYZ":{` +
-			`"allowed_subjects":["` + allowedSubject + `"],` +
-			`"blob_name":"` + blobName + `","download_name":"example.dar"}}`,
 	})
 	if err != nil {
 		t.Fatalf("config.ParseEnvironment() error = %v", err)
@@ -119,7 +117,7 @@ func TestFullDownloadStreamsExactSegmentsAndHeaders(t *testing.T) {
 		t,
 		newHandler(t, storage),
 		http.MethodGet,
-		"/v1/releases/"+releaseID+"/download",
+		downloadPath,
 		authenticatedHeaders(),
 	)
 	if recorder.Code != http.StatusOK {
@@ -163,7 +161,7 @@ func TestPartialDownloadReturnsExactSelectedBytes(t *testing.T) {
 		t,
 		newHandler(t, storage),
 		http.MethodGet,
-		"/v1/releases/"+releaseID+"/download",
+		downloadPath,
 		headers,
 	)
 	if recorder.Code != http.StatusPartialContent || recorder.Body.String() != "2345" {
@@ -188,7 +186,7 @@ func TestStaleIfRangeReturnsFullCurrentRepresentation(t *testing.T) {
 		t,
 		newHandler(t, storage),
 		http.MethodGet,
-		"/v1/releases/"+releaseID+"/download",
+		downloadPath,
 		headers,
 	)
 	if recorder.Code != http.StatusOK || recorder.Body.String() != "0123456789" {
@@ -211,7 +209,7 @@ func TestInvalidRangeReturns416WithoutOpeningBody(t *testing.T) {
 		t,
 		newHandler(t, storage),
 		http.MethodGet,
-		"/v1/releases/"+releaseID+"/download",
+		downloadPath,
 		headers,
 	)
 	assertJSONError(t, recorder, http.StatusRequestedRangeNotSatisfiable, "invalid_range")
@@ -234,7 +232,7 @@ func TestZeroLengthDownloadDoesNotOpenBody(t *testing.T) {
 		t,
 		newHandler(t, storage),
 		http.MethodGet,
-		"/v1/releases/"+releaseID+"/download",
+		downloadPath,
 		authenticatedHeaders(),
 	)
 	if recorder.Code != http.StatusOK || recorder.Body.Len() != 0 ||
@@ -247,7 +245,7 @@ func TestZeroLengthDownloadDoesNotOpenBody(t *testing.T) {
 	}
 }
 
-func TestDenialsHappenBeforeStorage(t *testing.T) {
+func TestAuthenticationAndInvalidRoutesAreDeniedBeforeStorage(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -257,14 +255,15 @@ func TestDenialsHappenBeforeStorage(t *testing.T) {
 		status  int
 		code    string
 	}{
-		{name: "missing identity", path: releaseID, status: 401, code: "authentication_required"},
+		{name: "missing identity", path: downloadPath, status: 401, code: "authentication_required"},
 		{
-			name: "subject not allowed", path: releaseID,
-			headers: testsupport.OIDCHeaders(oidcIssuer, otherSubject),
-			status:  403, code: "authorization_denied",
+			name: "old static route", path: "/v1/releases/" + releaseID + "/download",
+			headers: authenticatedHeaders(), status: 404, code: "release_not_found",
 		},
-		{name: "unknown release", path: unknownReleaseID, headers: authenticatedHeaders(), status: 404, code: "release_not_found"},
-		{name: "path-like release", path: "../example.dar", headers: authenticatedHeaders(), status: 404, code: "release_not_found"},
+		{
+			name: "path-like version", path: "/v1/releases/../download/example.dar",
+			headers: authenticatedHeaders(), status: 404, code: "release_not_found",
+		},
 	}
 	for _, testCase := range tests {
 		testCase := testCase
@@ -275,7 +274,7 @@ func TestDenialsHappenBeforeStorage(t *testing.T) {
 				t,
 				newHandler(t, storage),
 				http.MethodGet,
-				"/v1/releases/"+testCase.path+"/download",
+				testCase.path,
 				testCase.headers,
 			)
 			assertJSONError(t, recorder, testCase.status, testCase.code)
@@ -314,7 +313,7 @@ func TestStorageErrorsAreBoundedBeforeBodyCommit(t *testing.T) {
 				t,
 				newHandler(t, storage),
 				http.MethodGet,
-				"/v1/releases/"+releaseID+"/download",
+				downloadPath,
 				authenticatedHeaders(),
 			)
 			assertJSONError(t, recorder, tt.status, tt.code)
@@ -346,7 +345,7 @@ func TestOversizedObjectIsRejectedBeforeBodyOpen(t *testing.T) {
 		t,
 		newHandler(t, storage),
 		http.MethodGet,
-		"/v1/releases/"+releaseID+"/download",
+		downloadPath,
 		authenticatedHeaders(),
 	)
 	assertJSONError(t, recorder, http.StatusRequestEntityTooLarge, "release_too_large")
@@ -363,7 +362,7 @@ func TestCanceledStorageRequestDoesNotWriteAnErrorBody(t *testing.T) {
 		t,
 		newHandler(t, storage),
 		http.MethodGet,
-		"/v1/releases/"+releaseID+"/download",
+		downloadPath,
 		authenticatedHeaders(),
 	)
 	if recorder.Body.Len() != 0 {
@@ -390,7 +389,7 @@ func TestMidstreamVersionFailureTerminatesWithoutSensitiveLogging(t *testing.T) 
 		t,
 		httpapi.New(testConfig(t), storage, logger),
 		http.MethodGet,
-		"/v1/releases/"+releaseID+"/download",
+		downloadPath,
 		authenticatedHeaders(),
 	)
 	if recorder.Code != http.StatusOK || int64(recorder.Body.Len()) != config.MaxStorageSegment {
@@ -399,7 +398,7 @@ func TestMidstreamVersionFailureTerminatesWithoutSensitiveLogging(t *testing.T) 
 	if !strings.Contains(logs.String(), "stream_failure") {
 		t.Fatalf("log = %q", logs.String())
 	}
-	for _, forbidden := range []string{releaseID, blobName, oidcIssuer, allowedSubject, `"etag-v1"`} {
+	for _, forbidden := range []string{version, fileName, blobName, oidcIssuer, allowedSubject, `"etag-v1"`} {
 		if strings.Contains(logs.String(), forbidden) {
 			t.Fatalf("log contains forbidden value %q", forbidden)
 		}
@@ -419,7 +418,7 @@ func TestReaderCloseFailureTerminatesStream(t *testing.T) {
 		t,
 		httpapi.New(testConfig(t), storage, nil),
 		http.MethodGet,
-		"/v1/releases/"+releaseID+"/download",
+		downloadPath,
 		authenticatedHeaders(),
 	)
 	if recorder.Code != http.StatusOK || recorder.Body.String() != "abc" {

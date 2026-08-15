@@ -51,7 +51,6 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		"service starting",
 		"event", "startup",
 		"port", cfg.Port,
-		"releases", cfg.ReleaseCount(),
 		"version", version,
 		"revision", revision,
 	)

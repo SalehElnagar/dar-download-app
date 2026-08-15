@@ -91,18 +91,8 @@ func TestLegacyConfigurationInputsHaveNoAlias(t *testing.T) {
 		oldPrefix + "DAR_STORAGE_ACCOUNT_NAME":       "stdardownloadpoc01",
 		oldPrefix + "DAR_STORAGE_CONTAINER":          "dar-releases",
 		oldPrefix + "DAR_MANAGED_IDENTITY_CLIENT_ID": managedIdentityID,
-		oldPrefix + "DAR_RELEASES_JSON":              validEnvironment()[config.ReleasesJSONEnv],
 	}
 	if _, err := config.ParseEnvironment(oldOnly); err == nil {
 		t.Fatal("legacy environment names were accepted as aliases")
-	}
-
-	environment := validEnvironment()
-	legacyField := "allowed_" + "principal_ids"
-	environment[config.ReleasesJSONEnv] = `{"dar_01JABCDEF0123456789XYZ":{` +
-		`"` + legacyField + `":["` + allowedSubject + `"],` +
-		`"blob_name":"releases/example.dar","download_name":"example.dar"}}`
-	if _, err := config.ParseEnvironment(environment); err == nil {
-		t.Fatal("legacy release authorization field was accepted")
 	}
 }
