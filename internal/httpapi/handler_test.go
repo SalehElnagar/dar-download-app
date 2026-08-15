@@ -20,10 +20,10 @@ import (
 )
 
 const (
-	tenantID          = "11111111-1111-4111-8111-111111111111"
+	oidcIssuer        = "https://identity.example.com/realms/customers/"
 	managedIdentityID = "22222222-2222-4222-8222-222222222222"
-	principalID       = "33333333-3333-4333-8333-333333333333"
-	otherPrincipalID  = "44444444-4444-4444-8444-444444444444"
+	allowedSubject    = "customer:Case-Sensitive-001"
+	otherSubject      = "customer:other-002"
 	releaseID         = "dar_01JABCDEF0123456789XYZ"
 	unknownReleaseID  = "dar_01JUNKNOWN0123456789X"
 	blobName          = "releases/2026-08/example.dar"
@@ -32,12 +32,12 @@ const (
 func testConfig(t *testing.T) config.Config {
 	t.Helper()
 	cfg, err := config.ParseEnvironment(map[string]string{
-		config.TenantIDEnv:                tenantID,
+		config.OIDCIssuerEnv:              oidcIssuer,
 		config.StorageAccountNameEnv:      "stdardownloadpoc01",
 		config.StorageContainerEnv:        "dar-releases",
 		config.ManagedIdentityClientIDEnv: managedIdentityID,
 		config.ReleasesJSONEnv: `{"dar_01JABCDEF0123456789XYZ":{` +
-			`"allowed_principal_ids":["` + principalID + `"],` +
+			`"allowed_subjects":["` + allowedSubject + `"],` +
 			`"blob_name":"` + blobName + `","download_name":"example.dar"}}`,
 	})
 	if err != nil {
@@ -65,7 +65,7 @@ func request(t *testing.T, handler http.Handler, method, path string, headers ht
 }
 
 func authenticatedHeaders() http.Header {
-	return testsupport.EasyAuthHeaders(principalID, tenantID)
+	return testsupport.OIDCHeaders(oidcIssuer, allowedSubject)
 }
 
 func assertJSONError(t *testing.T, recorder *httptest.ResponseRecorder, status int, code string) {
@@ -87,7 +87,7 @@ func TestHealthIsAnonymousAndNeverReadsStorage(t *testing.T) {
 
 	storage := &testsupport.Storage{Objects: map[string]testsupport.Object{}}
 	recorder := request(t, newHandler(t, storage), http.MethodGet, "/healthz", nil)
-	if recorder.Code != http.StatusOK || recorder.Body.String() != `{"service":"harmony-dar-download","status":"ok"}` {
+	if recorder.Code != http.StatusOK || recorder.Body.String() != `{"service":"dar-download","status":"ok"}` {
 		t.Fatalf("response = %d %q", recorder.Code, recorder.Body.String())
 	}
 	statCalls, openCalls, _ := storage.Counts()
@@ -259,8 +259,8 @@ func TestDenialsHappenBeforeStorage(t *testing.T) {
 	}{
 		{name: "missing identity", path: releaseID, status: 401, code: "authentication_required"},
 		{
-			name: "wrong principal", path: releaseID,
-			headers: testsupport.EasyAuthHeaders(otherPrincipalID, tenantID),
+			name: "subject not allowed", path: releaseID,
+			headers: testsupport.OIDCHeaders(oidcIssuer, otherSubject),
 			status:  403, code: "authorization_denied",
 		},
 		{name: "unknown release", path: unknownReleaseID, headers: authenticatedHeaders(), status: 404, code: "release_not_found"},
@@ -399,7 +399,7 @@ func TestMidstreamVersionFailureTerminatesWithoutSensitiveLogging(t *testing.T) 
 	if !strings.Contains(logs.String(), "stream_failure") {
 		t.Fatalf("log = %q", logs.String())
 	}
-	for _, forbidden := range []string{releaseID, blobName, principalID, `"etag-v1"`} {
+	for _, forbidden := range []string{releaseID, blobName, oidcIssuer, allowedSubject, `"etag-v1"`} {
 		if strings.Contains(logs.String(), forbidden) {
 			t.Fatalf("log contains forbidden value %q", forbidden)
 		}

@@ -33,7 +33,7 @@ test-security:
 	  ./internal/download ./internal/httpapi ./internal/strictjson
 	go test -count=1 -race ./...
 	go test -run='^$$' -fuzz=FuzzParseEnvironmentPolicy -fuzztime=100000x ./internal/config
-	go test -run='^$$' -fuzz=FuzzAuthenticatePrincipalHeader -fuzztime=100000x ./internal/auth
+	go test -run='^$$' -fuzz=FuzzAuthenticateOIDCHeaders -fuzztime=100000x ./internal/auth
 	go test -run='^$$' -fuzz=FuzzSelectRange -fuzztime=100000x ./internal/download
 
 prebuild:

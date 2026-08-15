@@ -2,7 +2,7 @@
 
 The intended destination is the private repository `SalehElnagar/dar-download-app`. Repository
 creation, first push, rulesets, package settings, and environment approval are owner actions;
-the application build does not need Azure or Entra credentials.
+the application build does not need cloud or identity-provider credentials.
 
 ## Create and publish
 
@@ -58,5 +58,6 @@ confidential.
 
 After an approved semantic version tag completes, verify the GHCR digest, Cosign signature,
 SBOM and SLSA provenance attestations, and retained successful evidence. Deploy the immutable
-digest through the separate platform repository and complete the authorized staging sign-in,
-authorization, checksum, range-resume, and penetration tests before production promotion.
+digest through the separate platform repository and complete the authorized staging OIDC,
+header-stripping, authorization, checksum, range-resume, and penetration tests before production
+promotion.

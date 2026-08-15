@@ -57,7 +57,7 @@ go test -count=1 -race ./...
 
 printf '%s\n' "[prebuild 8/14] bounded native fuzzing"
 go test -run='^$' -fuzz=FuzzParseEnvironmentPolicy -fuzztime=100000x ./internal/config
-go test -run='^$' -fuzz=FuzzAuthenticatePrincipalHeader -fuzztime=100000x ./internal/auth
+go test -run='^$' -fuzz=FuzzAuthenticateOIDCHeaders -fuzztime=100000x ./internal/auth
 go test -run='^$' -fuzz=FuzzSelectRange -fuzztime=100000x ./internal/download
 
 printf '%s\n' "[prebuild 9/14] Go vulnerability database"
@@ -81,7 +81,9 @@ printf '%s\n' "[prebuild 11/14] repository policy analysis"
   --error \
   --metrics=off \
   --exclude .agents \
+  --exclude .specify \
   --exclude .security \
+  --exclude specs \
   --exclude security/testdata \
   --json \
   --output .security/evidence/semgrep.json \
@@ -94,7 +96,9 @@ trivy fs \
   --exit-code 1 \
   --skip-dirs .agents \
   --skip-dirs .git \
+  --skip-dirs .specify \
   --skip-dirs .security \
+  --skip-dirs specs \
   --format json \
   --output "$evidence_dir/trivy-fs.json" \
   .

@@ -9,7 +9,7 @@ func exerciseHeaderLoggingRule(logger *slog.Logger, request *http.Request) {
 	// ruleid: dar-no-sensitive-header-logging
 	logger.Info("request received", "headers", request.Header)
 	// ruleid: dar-no-sensitive-header-logging
-	logger.Warn("identity received", "principal", request.Header.Get("X-MS-CLIENT-PRINCIPAL"))
+	logger.Warn("identity received", "subject", request.Header.Get("X-DAR-OIDC-Subject"))
 
 	// ok: dar-no-sensitive-header-logging
 	_ = authenticate(request.Header)

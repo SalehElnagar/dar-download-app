@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Use the private **Security** tab and create a private vulnerability report for this repository.
-Do not open a public issue and do not include credentials, customer identifiers, live tenant
+Do not open a public issue and do not include credentials, customer identifiers, live identity-provider
 configuration, DAR content, or exploit data in ordinary pull requests or logs.
 
 If private vulnerability reporting is not enabled, contact the repository owner through the
@@ -43,12 +43,12 @@ broad suppressions, and exceptions for secret findings are forbidden.
 
 For a suspected compromise:
 
-1. Stop promotion and disable the affected Container App revision or release mapping.
+1. Stop promotion and disable the affected application revision or release mapping.
 2. Revoke the workload identity's Blob role if storage authority may be compromised.
 3. Preserve image digest, SBOM, attestations, audit logs, and gate evidence.
 4. Patch and rebuild from reviewed source; rerun every source and image gate.
 5. Publish a new signed immutable version and deliberately roll it out.
 6. Complete an authorized impact assessment before restoring access.
 
-Deployment, Entra, storage, and RBAC actions are owned by the platform repository and its
+Deployment, identity-provider, storage, and RBAC actions are owned by the platform repository and its
 approved operators; this application repository performs none of them.

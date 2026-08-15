@@ -64,13 +64,13 @@ signature and both attestations, and only then promotes the digest to the versio
 
 Cosign keyless signing uses GitHub's short-lived OIDC identity and the public Sigstore trust
 root. The transparency record exposes signing metadata such as repository and workflow identity,
-but it does not expose source, DARs, tenant values, or image contents. If repository-name
+but it does not expose source, DARs, issuer values, or image contents. If repository-name
 confidentiality becomes a requirement, replace keyless public signing with an approved private
 Sigstore or enterprise-managed key design before tagging a release.
 
 ## Residual assurance
 
-The local DAST target cannot authenticate through a real tenant and intentionally cannot access
+The local DAST target cannot authenticate through a live OIDC layer and intentionally cannot access
 live Blob Storage. An authorized staging penetration test remains mandatory before production.
 Newly disclosed vulnerabilities also require continuous dependency alerts and rebuilds; a scan
 is evidence about its database and candidate at one point in time.

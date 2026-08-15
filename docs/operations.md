@@ -1,45 +1,50 @@
-# Operations and Container Apps Integration
+# Operations and Trusted OIDC Integration
 
 ## Responsibility boundary
 
 The Go process is a private download authorization and streaming adapter. It does not perform
-interactive OIDC itself. Azure Container Apps Authentication, commonly called Easy Auth, owns
-the browser redirect, Entra callback, session, and trusted identity-header injection.
+interactive login, redirects, callbacks, session management, discovery, key retrieval, or token
+validation. A separately deployed OIDC authentication layer owns the customer browser session
+or bearer flow.
 
-The platform repository owns the Container App, authentication child resource, Entra app
-registration, private networking, DNS, Blob account, managed identity, RBAC, monitoring, and
-deployment revision. This repository builds and validates only the application image.
+After validating the login or token, that layer must strip every caller-supplied identity
+header and inject exactly one `X-DAR-OIDC-Issuer` and exactly one `X-DAR-OIDC-Subject` header.
+Only private traffic from that layer may reach the app. The app exact-matches the issuer and
+then exact-matches the opaque, case-sensitive subject against the selected release policy.
+
+The platform repository owns the OIDC layer, identity-provider configuration, private ingress,
+networking, DNS, Blob account, managed identity, RBAC, monitoring, and deployment revision.
+This repository builds and validates only the application image.
 
 ## Required platform configuration
 
 Before live testing, the platform owner must prove all of the following:
 
-- Container Apps Authentication uses the intended Microsoft Entra tenant and registration.
-- Unauthenticated protected requests redirect to the Entra provider, while only `/healthz` is
-  excluded from authentication.
-- The callback is the exact Container App callback URI and ID-token issuance is enabled.
-- Caller-supplied `X-MS-CLIENT-PRINCIPAL` and `X-MS-CLIENT-PRINCIPAL-ID` values cannot reach the
-  app unchanged. Direct ingress that bypasses Easy Auth is blocked.
-- TLS terminates only at an approved platform boundary. The app is not exposed directly to the
-  Internet.
+- The OIDC layer validates the intended issuer and authentication flow before forwarding.
+- Protected requests require authentication, while only `/healthz` is intentionally anonymous.
+- Caller-supplied copies of both internal identity headers are removed before new values are
+  injected, and duplicate values cannot reach the app.
+- Direct ingress that bypasses the OIDC layer is blocked.
+- TLS terminates only at an approved boundary; the app is not exposed directly to the Internet.
+- The app receives the exact configured issuer string, including any significant trailing slash.
 - The dedicated user-assigned identity has only `Storage Blob Data Reader` on the intended
   container, not account-wide write or key access.
-- The Container App reaches the Blob account through the private endpoint and private DNS.
+- The app reaches the Blob account through the approved private endpoint and private DNS.
 - The storage public network endpoint remains disabled when that is the environment policy.
 
-Authentication proves identity. The Go service still requires the same canonical principal in
-the release's exact allowlist before it performs any Blob operation.
+Authentication proves one identity. The Go service still requires the exact subject in the
+release allowlist before it performs any Blob operation.
 
 ## Release policy
 
-`HARMONY_DAR_RELEASES_JSON` is strict JSON keyed by an opaque release ID. An example using only
-synthetic identifiers is:
+`DAR_DOWNLOAD_RELEASES_JSON` is strict JSON keyed by an opaque release ID. This example uses
+only synthetic values:
 
 ```json
 {
   "dar_01JABCDEF0123456789XYZ": {
-    "allowed_principal_ids": [
-      "33333333-3333-4333-8333-333333333333"
+    "allowed_subjects": [
+      "customer:synthetic-001"
     ],
     "blob_name": "releases/2026-08/example.dar",
     "download_name": "example.dar"
@@ -47,12 +52,12 @@ synthetic identifiers is:
 }
 ```
 
-The policy parser rejects unknown fields, duplicate JSON keys, unsafe names, malformed UUIDs,
-empty allowlists, and excessive sizes. Release IDs are sent to customers; Blob paths are never
-accepted from a request.
+The parser rejects unknown fields, duplicate JSON keys, unsafe names, invalid subjects, empty
+allowlists, and excessive sizes. Release IDs are sent to customers; Blob paths are never
+accepted from a request. Full parsing rules are in [the configuration contract](configuration.md).
 
 Treat the policy as authorization-sensitive configuration. Supply it through the approved
-Container App configuration mechanism, prevent it from entering logs, and review every change.
+runtime configuration mechanism, prevent it from entering logs, and review every change.
 
 ## Runtime constraints
 
@@ -65,37 +70,39 @@ Run the image with:
 - `no-new-privileges` enabled;
 - no writable volume unless a future reviewed requirement introduces one;
 - bounded CPU, memory, replicas, and platform request concurrency;
-- platform connection draining longer than the largest expected transfer.
+- connection draining longer than the largest expected transfer.
 
-The service has bounded request headers, configuration, object size, transfer duration, storage
-segment size, and storage concurrency. It supports one HTTP byte range so browsers can resume a
-download. It streams Blob bytes through the app because the Blob endpoint is private and no SAS
-is exposed.
+The service has bounded request headers, configuration, object size, transfer duration, and
+storage segment size. Each download opens at most one Blob reader at a time; total request and
+storage concurrency must be bounded by the platform. It supports one HTTP byte range so clients
+can resume a download. It streams Blob bytes through the app because the Blob endpoint is
+private and no SAS is exposed.
 
 ## Health and observability
 
-Use `/healthz` only for liveness. It intentionally does not call Entra or Blob Storage. Add a
-separate platform-level readiness or synthetic download check when those dependencies must be
-observed.
+Use `/healthz` only for liveness. It intentionally does not call the OIDC layer or Blob Storage.
+Add a separate platform-level readiness or synthetic download check when those dependencies
+must be observed.
 
-Application logs are structured and deliberately exclude principal IDs, identity headers,
+Application logs are structured and deliberately exclude subjects, issuers, identity headers,
 release policy, Blob URLs and paths, request tokens, and raw errors. Monitor at the platform
 boundary for:
 
-- authentication redirect or callback failures;
-- elevated `401`, `403`, `404`, `416`, or `503` rates;
+- OIDC login, session, token-validation, or header-injection failures;
+- elevated `401`, `403`, `404`, `416`, or `502` rates;
 - transfer latency, cancellation, and revision restarts;
 - managed-identity or private-endpoint failures;
 - unexpected configuration revision changes.
 
-Use bounded-cardinality dimensions. Do not add customer principal, release ID, Blob path, or
-download filename as a metric or log label.
+Use bounded-cardinality dimensions. Do not add subject, release ID, Blob path, or download
+filename as a metric or log label.
 
 ## Rollout and rollback
 
 Deploy by immutable image digest, not a mutable tag. Start with a non-production revision and a
-synthetic DAR. Verify sign-in, exact entitlement, denial for a second identity, full download,
-resume, byte checksum, private storage reachability, and audit logs.
+synthetic DAR. Verify both supported upstream client flows, exact issuer/subject entitlement,
+denial for a second subject, full download, resume, byte checksum, private storage reachability,
+and audit logs.
 
 For rollback, route traffic to the last approved digest or disable the faulty revision. For a
 bad or over-broad release policy, remove the affected mapping through a reviewed configuration
@@ -104,7 +111,7 @@ revision. Never overwrite an existing image tag or rewrite retained evidence.
 ## Required live assurance
 
 Local ZAP tests cover the app's anonymous and unauthenticated HTTP surface with synthetic data.
-They do not prove the Entra redirect, callback, trusted-header boundary, private DNS, managed
-identity, Blob RBAC, or authenticated download in a tenant. Before production promotion, run a
-separately authorized staging penetration test with dedicated test identities and a synthetic
-DAR. Record the image digest and environment revision in that report.
+They do not prove live login/token verification, inbound-header stripping, private ingress,
+private DNS, managed identity, Blob RBAC, or an authenticated download. Before production
+promotion, run a separately authorized staging penetration test with dedicated test identities
+and a synthetic DAR. Record the image digest and environment revision in that report.

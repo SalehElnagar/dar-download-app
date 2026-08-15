@@ -1,38 +1,44 @@
 # DAR Download App
 
 Small Go service for streaming explicitly authorized DAR releases from private Azure Blob
-Storage. Azure Container Apps Authentication performs the Microsoft Entra sign-in. This
-service independently verifies the trusted Easy Auth identity, checks an exact per-release
-principal allowlist, and reads the configured Blob with its own managed identity.
+Storage. A separately deployed OIDC authentication layer verifies the customer login or token,
+strips caller-supplied identity headers, and injects one exact issuer and subject pair on the
+app's private ingress. The app checks that exact identity against a per-release subject
+allowlist before using its storage-only managed identity.
 
-This repository contains only application source, tests, API/configuration contracts, the
-container build, and security/release automation. Azure, Entra, networking, DNS, RBAC, storage,
-and Container Apps deployment configuration belong in a separate platform repository.
+This repository contains only product source, tests, API/configuration contracts, container
+packaging, and security/release automation. Identity-provider deployment, cloud resources,
+networking, DNS, RBAC, storage provisioning, and application deployment belong in a separate
+platform repository.
 
 ```mermaid
 flowchart LR
-    B["Customer browser"] -->|"HTTPS download link"| EA["Container Apps Authentication"]
-    EA -->|"Entra sign-in and trusted identity headers"| APP["DAR Download App"]
-    APP -->|"Exact principal and release authorization"| AZ["Azure Blob SDK"]
-    AZ -->|"Dedicated managed identity over private endpoint"| BS["Private Blob Storage"]
+    C["External client"] -->|"OIDC browser session or bearer flow"| OIDC["Trusted OIDC layer"]
+    OIDC -->|"Private ingress: exact issuer and subject"| APP["DAR Download App"]
+    APP -->|"Exact subject and release authorization"| AZ["Azure Blob SDK"]
+    AZ -->|"Storage-only managed identity"| BS["Private Blob Storage"]
     BS -->|"ETag-bound segments, at most 4 MiB each"| APP
-    APP -->|"One streamed response"| B
+    APP -->|"One streamed response"| C
 ```
 
-The app does not accept Blob paths from customers, mint SAS URLs, mount Blob Storage, accept
-storage keys, or reuse the customer's token for storage. An authenticated user is still denied
-unless their exact principal ID is allowed for the requested opaque release ID.
+The app does not implement an authorization-code flow, validate customer bearer or session
+tokens, accept Blob paths from customers, mint SAS URLs, mount Blob Storage, accept storage
+keys, or reuse customer authority for storage. Direct ingress that bypasses the trusted OIDC
+layer is forbidden.
 
 ## HTTP contract
 
-- `GET /healthz` is anonymous liveness and never calls storage.
-- `GET /v1/releases/<opaque-release-id>/download` returns the configured `.dar` file.
+- `GET /healthz` is anonymous liveness and never calls identity or storage dependencies.
+- `GET /v1/releases/<opaque-release-id>/download` returns the configured `.dar` file only after
+  exact issuer and subject authorization.
+- `X-DAR-OIDC-Issuer` and `X-DAR-OIDC-Subject` are internal trusted-boundary inputs. They are not
+  public client credentials or caller-controlled OpenAPI parameters.
 - Full downloads and one byte range are supported. Object reads are bound to the observed strong
   ETag, sequential, and capped at 4 MiB per storage request.
 - All other routes and methods are denied with bounded responses.
 
 See [the OpenAPI contract](api/openapi.yaml) and
-[configuration contract](specs/001-secure-dar-download/contracts/configuration.md).
+[the runtime configuration contract](docs/configuration.md).
 
 ## Local validation
 
@@ -64,22 +70,22 @@ The service fails startup unless all required values are valid:
 
 | Variable | Purpose |
 | --- | --- |
-| `HARMONY_DAR_TENANT_ID` | Exact Entra tenant UUID expected in trusted identity evidence |
-| `HARMONY_DAR_STORAGE_ACCOUNT_NAME` | Private Blob account name |
-| `HARMONY_DAR_STORAGE_CONTAINER` | Fixed release container |
-| `HARMONY_DAR_MANAGED_IDENTITY_CLIENT_ID` | Dedicated user-assigned identity client UUID |
-| `HARMONY_DAR_RELEASES_JSON` | Strict opaque release-to-Blob and principal policy |
-| `HARMONY_PORT` | Optional listener port; defaults to `8000` |
+| `DAR_DOWNLOAD_OIDC_ISSUER` | Exact HTTPS issuer expected from the trusted OIDC layer |
+| `DAR_DOWNLOAD_STORAGE_ACCOUNT_NAME` | Private Blob account name |
+| `DAR_DOWNLOAD_STORAGE_CONTAINER` | Fixed release container |
+| `DAR_DOWNLOAD_MANAGED_IDENTITY_CLIENT_ID` | Dedicated storage identity client UUID |
+| `DAR_DOWNLOAD_RELEASES_JSON` | Strict opaque release-to-Blob and subject policy |
+| `DAR_DOWNLOAD_PORT` | Optional listener port; defaults to `8000` |
 
-The release policy is configuration, not a credential, but it is authorization-sensitive. Do
-not place customer identifiers or live policy values in this repository or CI logs.
+The release policy is authorization-sensitive configuration, not a credential. Do not place
+customer identifiers or live policy values in this repository or CI logs. See the
+[configuration contract](docs/configuration.md) for exact parsing and boundary rules.
 
 ## Further guidance
 
-- [Operation and Container Apps integration](docs/operations.md)
+- [Operations and trusted OIDC integration](docs/operations.md)
 - [Security gates and evidence](docs/security-gates.md)
 - [Requirement-to-evidence map](docs/assurance-map.md)
 - [Threat model](docs/threat-model.md)
 - [Private GitHub repository setup](docs/github-setup.md)
 - [Vulnerability reporting](SECURITY.md)
-- [Feature specification](specs/001-secure-dar-download/spec.md)

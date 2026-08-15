@@ -1,42 +1,44 @@
 # Requirement-to-Evidence Map
 
-This map identifies what the repository can prove locally and what remains a protected GitHub
-or live-platform responsibility. Passing evidence applies only to the exact recorded source
-digest and image ID.
+This self-contained map identifies what the repository can prove locally and what remains a
+protected GitHub or live-platform responsibility. Passing evidence applies only to the exact
+recorded source digest and image ID.
 
 ## Functional requirements
 
-| Requirements | Primary implementation and evidence |
+| Requirement | Primary implementation and evidence |
 | --- | --- |
-| FR-001–FR-005 | Two-route OpenAPI contract; strict Easy Auth parsing; exact tenant, principal, opaque release mapping, and denial-before-storage tests |
-| FR-006–FR-010 | Dedicated managed-identity Blob adapter; ETag-bound full and single-range tests, including strong `If-Range` behavior |
-| FR-011–FR-014 | Header/config/object/time bounds, sequential 4 MiB storage segments, cancellation/error tests, and redacted structured-log tests |
-| FR-015 | Repository boundary test rejects deployment files, DARs, archives, environment files, and Azure state/configuration |
-| FR-016–FR-017 | Unit, integration, contract, race, deterministic fuzz, dependency, SAST, secret, and workflow checks in the pre-build gate |
-| FR-018–FR-020 | Digest-pinned static build; Linux AMD64 manifest and ELF checks; distroless non-root policy; two image scanners; offline fail-closed ZAP scan |
-| FR-021 | Exactly empty automated exception registry enforced by a repository test and `SECURITY.md` |
-| FR-022–FR-023 | Least-privilege, immutable, digest-signing release workflow with cross-job candidate/provenance readback plus reviewed Dependabot proposals |
-| FR-024 | Security, operations, threat-model, and staging-assurance documentation |
+| Only anonymous health and protected release download routes exist | Canonical OpenAPI contract and repository route/status contract tests |
+| Trusted OIDC identity requires one exact configured issuer and one bounded opaque subject | Configuration, identity, fuzz, and handler tests covering malformed, duplicate, mismatched, and trailing-slash cases |
+| Authentication alone never grants a release | Exact case-sensitive `allowed_subjects` policy and denial-before-storage tests |
+| Customer input never selects storage authority or a Blob path | Opaque route validation, server-owned mapping, request-token SAST rule, and Blob adapter tests |
+| Blob delivery uses dedicated storage identity and one object version | Managed-identity Blob adapter plus ETag-bound full and single-range tests |
+| Transfers and failures are bounded | Header/config/object/time limits, sequential 4 MiB reads, cancellation/error tests, and redacted log tests |
+| Product repository excludes deployment, customer, release, and local AI-operation artifacts | Tracked-tree, ignored-path, extension, link, and workflow-policy tests |
+| Source gates precede image construction | Unit, integration, contract, race, deterministic fuzz, dependency, SAST, secret, and workflow-order checks |
+| Final image is minimal and independently checked | Digest-pinned static build; Linux AMD64 manifest and ELF checks; distroless non-root policy; two image scanners; offline fail-closed ZAP scan |
+| Security exceptions cannot silently weaken the candidate | Exactly empty exception registry enforced by repository test and `SECURITY.md` |
+| Publishing is immutable, least-privilege, signed, and provenance-bound | Pinned release workflow with cross-job candidate/provenance readback and reviewed dependency proposals |
 
-## Success criteria
+## Measurable outcomes
 
-| Criterion | Evidence or boundary |
+| Outcome | Evidence or boundary |
 | --- | --- |
-| SC-001 | 30 MiB integration test asserts byte correctness, sub-96 MiB conservative integration heap, maximum 4 MiB storage opens, and one active reader |
-| SC-002 | Table and fuzz tests cover full, open, suffix, validator, malformed, multiple, and unsatisfiable ranges |
-| SC-003 | Denial matrix asserts zero storage calls for unproven requests |
-| SC-004 | Pre-build enforces at least 90% core statement coverage, race, and bounded fuzz completion |
-| SC-005 | Source digest and passing pre-build marker are mandatory before image construction |
-| SC-006 | Post-build runs the exact image read-only, non-root, capability-free, and checks for no shell or package manager |
-| SC-007 | Gitleaks, Govulncheck, Gosec, Semgrep, Trivy filesystem/image, Grype, and ZAP are release-blocking |
-| SC-008 | Local post-build creates SPDX and CycloneDX SBOMs and tests transfer-integrity rejection; the protected GitHub release job must revalidate every marker, then create and verify the signature and signed attestations before tagging |
-| SC-009 | Scanner errors, warnings where applicable, stale evidence, architecture mismatch, and skipped or failed gates return non-zero |
-| SC-010 | The synthetic HTTP test proves the 30 MiB full/resumed bytes; the exact image separately passes constrained runtime smoke and offline API DAST |
+| 30 MiB streaming stays byte-correct and bounded | Integration test asserts exact bytes, sub-96 MiB conservative heap, maximum 4 MiB storage opens, and one active reader |
+| Full and single-range behavior stays exact | Table and fuzz tests cover full, open, suffix, validator, malformed, multiple, and unsatisfiable ranges |
+| Unproven requests never touch storage | Denial matrix asserts zero storage calls for invalid identity, disallowed subject, and invalid/unknown release |
+| Core correctness stays exercised | Pre-build enforces at least 90% core statement coverage, race, and bounded fuzz completion |
+| No image is built from unvalidated source | Source digest and matching passing pre-build marker are mandatory before image construction |
+| Packaged runtime remains constrained | Post-build runs the exact image read-only, non-root, capability-free, and checks for no shell or package manager |
+| Required scanners remain release-blocking | Gitleaks, Govulncheck, Gosec, Semgrep, Trivy filesystem/image, Grype, and ZAP all fail closed |
+| Evidence stays candidate-bound | SPDX and CycloneDX SBOMs plus transfer-integrity controls bind source, image, platform, revision, and provenance |
+| Gate errors never count as clean results | Scanner errors, warnings where applicable, stale evidence, architecture mismatch, and skipped or failed gates return non-zero |
 
 ## Evidence that cannot be produced locally
 
-Before the first production promotion, the owner must obtain an independent code/security
-review, a successful run in the private GitHub repository, signature and attestation
-verification for the registry digest, and an authorized staging test covering Entra redirect,
-trusted-header stripping, exact entitlement, private Blob access, full/resumed checksum, and
-penetration testing. None of those live results may be inferred from local evidence.
+Before production promotion, the owner must obtain an independent code/security review, a
+successful run in the private GitHub repository, signature and attestation verification for the
+registry digest, and an authorized staging test covering the chosen external OIDC flow, token or
+session validation, caller-header stripping, private ingress, exact entitlement, private Blob
+access, full/resumed checksum, and penetration testing. None of those live results may be
+inferred from local evidence.

@@ -1,13 +1,19 @@
 openapi: 3.0.3
 info:
   title: DAR Download Application
-  version: 1.0.0
+  version: 2.0.0
   description: >-
-    Private service behind Azure Container Apps Authentication. The platform completes the
-    Entra browser flow; the application independently validates the trusted principal and
-    exact release entitlement.
+    Private service behind a separately deployed OIDC authentication layer. External clients
+    authenticate there with a browser session or bearer flow. That trusted layer validates the
+    login or token, strips caller-supplied identity headers, and injects the internal identity
+    inputs on private app ingress. The application does not implement the browser authorization
+    flow or validate customer session or bearer tokens. Every non-GET method receives a bounded
+    405 method_not_allowed response.
 servers:
-  - url: https://dar-download.internal.example
+  - url: https://downloads.example.invalid
+    description: >-
+      Trusted OIDC-protected upstream endpoint for external clients. The private app ingress is
+      not a public server and must be reachable only from this authentication layer.
 paths:
   /healthz:
     get:
@@ -16,6 +22,11 @@ paths:
       responses:
         "200":
           description: Healthy process
+          headers:
+            Cache-Control:
+              schema: { type: string, enum: [no-store] }
+            X-Content-Type-Options:
+              schema: { type: string, enum: [nosniff] }
           content:
             application/json:
               schema:
@@ -23,9 +34,16 @@ paths:
   /v1/releases/{release_id}/download:
     get:
       operationId: downloadRelease
-      summary: Download one exact release authorized for the authenticated principal
+      summary: Download one exact release authorized for the authenticated OIDC subject
       security:
-        - platformSession: []
+        - upstreamOIDC: []
+      x-trusted-boundary-headers:
+        description: >-
+          Internal trusted-boundary inputs from the OIDC layer, never public credentials or
+          caller-controlled request parameters. Direct app ingress is forbidden.
+        required:
+          - X-DAR-OIDC-Issuer
+          - X-DAR-OIDC-Subject
       parameters:
         - name: release_id
           in: path
@@ -40,7 +58,7 @@ paths:
           schema:
             type: string
             maxLength: 128
-            pattern: ^bytes=[0-9]*-[0-9]*$
+            pattern: '^bytes=(?:[0-9]+-[0-9]*|-[1-9][0-9]*)$'
         - name: If-Range
           in: header
           required: false
@@ -69,12 +87,20 @@ paths:
           headers:
             Accept-Ranges:
               schema: { type: string, enum: [bytes] }
+            Cache-Control:
+              schema: { type: string, enum: ["private, no-store"] }
+            Content-Disposition:
+              schema:
+                type: string
+                pattern: '^attachment; filename="[A-Za-z0-9._-]+[.]dar"$'
             Content-Range:
               schema: { type: string }
             Content-Length:
               schema: { type: integer, minimum: 1 }
             ETag:
               schema: { type: string }
+            X-Content-Type-Options:
+              schema: { type: string, enum: [nosniff] }
           content:
             application/octet-stream:
               schema: { type: string, format: binary }
@@ -89,6 +115,8 @@ paths:
         "416":
           description: Malformed, unsupported, or unsatisfiable range
           headers:
+            Accept-Ranges:
+              schema: { type: string, enum: [bytes] }
             Content-Range:
               schema: { type: string }
           content:
@@ -100,18 +128,20 @@ paths:
           $ref: "#/components/responses/StorageUnavailable"
 components:
   securitySchemes:
-    platformSession:
-      type: apiKey
-      in: cookie
-      name: AppServiceAuthSession
-      description: Hosting-platform session; the application does not create this cookie.
+    upstreamOIDC:
+      type: openIdConnect
+      openIdConnectUrl: https://identity.example.invalid/.well-known/openid-configuration
+      description: >-
+        External authentication requirement enforced by the trusted upstream OIDC layer. The
+        layer may use a browser session or validate a bearer token. The app never processes
+        this public credential, and clients must not send the internal X-DAR identity headers.
   schemas:
     Health:
       type: object
       additionalProperties: false
       required: [service, status]
       properties:
-        service: { type: string, enum: [harmony-dar-download] }
+        service: { type: string, enum: [dar-download] }
         status: { type: string, enum: [ok] }
     Error:
       type: object
@@ -130,13 +160,13 @@ components:
             - storage_unavailable
   responses:
     AuthenticationRequired:
-      description: Trusted platform identity evidence is absent or invalid
+      description: Trusted upstream OIDC identity evidence is absent or invalid
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
           example: { error: authentication_required }
     AuthorizationDenied:
-      description: The exact principal is not entitled to this exact release
+      description: The exact OIDC subject is not entitled to this exact release
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

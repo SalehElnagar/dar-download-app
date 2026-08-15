@@ -11,6 +11,11 @@ func FuzzParseEnvironmentPolicy(f *testing.F) {
 	f.Add(valid[config.ReleasesJSONEnv])
 	f.Add(`{}`)
 	f.Add(`{"duplicate":1,"duplicate":2}`)
+	f.Add(`{"dar_01JABCDEF0123456789XYZ":{"allowed_subjects":["customer:\u0001"],` +
+		`"blob_name":"releases/example.dar","download_name":"example.dar"}}`)
+	legacyField := "allowed_" + "principal_ids"
+	f.Add(`{"dar_01JABCDEF0123456789XYZ":{"` + legacyField + `":["customer:001"],` +
+		`"blob_name":"releases/example.dar","download_name":"example.dar"}}`)
 	f.Add(string([]byte{0xff, 0x00, 0x01}))
 
 	f.Fuzz(func(t *testing.T, policy string) {

@@ -9,22 +9,48 @@ import (
 )
 
 const (
-	tenantID          = "11111111-1111-4111-8111-111111111111"
+	oidcIssuer        = "https://identity.example.com/realms/customers/"
 	managedIdentityID = "22222222-2222-4222-8222-222222222222"
-	principalID       = "33333333-3333-4333-8333-333333333333"
+	allowedSubject    = "customer:Case-Sensitive-001"
 	releaseID         = "dar_01JABCDEF0123456789XYZ"
 )
 
 func validEnvironment() map[string]string {
 	return map[string]string{
-		config.TenantIDEnv:                tenantID,
+		config.OIDCIssuerEnv:              oidcIssuer,
 		config.StorageAccountNameEnv:      "stdardownloadpoc01",
 		config.StorageContainerEnv:        "dar-releases",
 		config.ManagedIdentityClientIDEnv: managedIdentityID,
 		config.ReleasesJSONEnv: `{"dar_01JABCDEF0123456789XYZ":{` +
-			`"allowed_principal_ids":["33333333-3333-4333-8333-333333333333"],` +
+			`"allowed_subjects":["` + allowedSubject + `"],` +
 			`"blob_name":"releases/2026-08/example.dar",` +
 			`"download_name":"example.dar"}}`,
+	}
+}
+
+func TestEnvironmentVariableNamesAreExact(t *testing.T) {
+	t.Parallel()
+
+	keys := map[string]string{
+		"OIDC issuer":             config.OIDCIssuerEnv,
+		"storage account":         config.StorageAccountNameEnv,
+		"storage container":       config.StorageContainerEnv,
+		"managed identity client": config.ManagedIdentityClientIDEnv,
+		"release policy":          config.ReleasesJSONEnv,
+		"port":                    config.PortEnv,
+	}
+	want := map[string]string{
+		"OIDC issuer":             "DAR_DOWNLOAD_OIDC_ISSUER",
+		"storage account":         "DAR_DOWNLOAD_STORAGE_ACCOUNT_NAME",
+		"storage container":       "DAR_DOWNLOAD_STORAGE_CONTAINER",
+		"managed identity client": "DAR_DOWNLOAD_MANAGED_IDENTITY_CLIENT_ID",
+		"release policy":          "DAR_DOWNLOAD_RELEASES_JSON",
+		"port":                    "DAR_DOWNLOAD_PORT",
+	}
+	for purpose, key := range keys {
+		if key != want[purpose] {
+			t.Errorf("%s key = %q, want %q", purpose, key, want[purpose])
+		}
 	}
 }
 
@@ -35,14 +61,14 @@ func TestParseEnvironmentAcceptsExactPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseEnvironment() error = %v", err)
 	}
-	if cfg.TenantID != tenantID || cfg.ManagedIdentityClientID != managedIdentityID {
+	if cfg.OIDCIssuer != oidcIssuer || cfg.ManagedIdentityClientID != managedIdentityID {
 		t.Fatalf("identity config = %#v", cfg)
 	}
 	if cfg.StorageAccountName != "stdardownloadpoc01" || cfg.StorageContainer != "dar-releases" {
 		t.Fatalf("storage config = %#v", cfg)
 	}
-	if cfg.Port != 8000 {
-		t.Fatalf("Port = %d, want 8000", cfg.Port)
+	if cfg.Port != config.DefaultPort {
+		t.Fatalf("Port = %d, want %d", cfg.Port, config.DefaultPort)
 	}
 	release, ok := cfg.Release(releaseID)
 	if !ok {
@@ -51,7 +77,7 @@ func TestParseEnvironmentAcceptsExactPolicy(t *testing.T) {
 	if release.BlobName != "releases/2026-08/example.dar" || release.DownloadName != "example.dar" {
 		t.Fatalf("release = %#v", release)
 	}
-	if !release.Allows(principalID) || release.Allows(managedIdentityID) {
+	if !release.Allows(allowedSubject) || release.Allows(strings.ToLower(allowedSubject)) {
 		t.Fatalf("release allowlist = %#v", release)
 	}
 }
@@ -59,9 +85,9 @@ func TestParseEnvironmentAcceptsExactPolicy(t *testing.T) {
 func TestParseEnvironmentAcceptsExplicitPort(t *testing.T) {
 	t.Parallel()
 
-	env := validEnvironment()
-	env[config.PortEnv] = "9443"
-	cfg, err := config.ParseEnvironment(env)
+	environment := validEnvironment()
+	environment[config.PortEnv] = "9443"
+	cfg, err := config.ParseEnvironment(environment)
 	if err != nil {
 		t.Fatalf("ParseEnvironment() error = %v", err)
 	}
@@ -74,50 +100,67 @@ func TestParseEnvironmentRejectsUnsafeOrAmbiguousInputs(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]func(map[string]string){
-		"missing required value": func(env map[string]string) {
-			delete(env, config.TenantIDEnv)
+		"missing required value": func(environment map[string]string) {
+			delete(environment, config.OIDCIssuerEnv)
 		},
-		"non canonical tenant": func(env map[string]string) {
-			env[config.TenantIDEnv] = "AAAAAAAA-1111-4111-8111-111111111111"
+		"invalid issuer": func(environment map[string]string) {
+			environment[config.OIDCIssuerEnv] = "http://identity.example.com"
 		},
-		"bad account": func(env map[string]string) {
-			env[config.StorageAccountNameEnv] = "Bad_Account"
+		"invalid managed identity": func(environment map[string]string) {
+			environment[config.ManagedIdentityClientIDEnv] = "not-a-client-id"
 		},
-		"bad container": func(env map[string]string) {
-			env[config.StorageContainerEnv] = "-bad-container"
+		"bad account": func(environment map[string]string) {
+			environment[config.StorageAccountNameEnv] = "Bad_Account"
 		},
-		"invalid port": func(env map[string]string) {
-			env[config.PortEnv] = "0"
+		"bad container": func(environment map[string]string) {
+			environment[config.StorageContainerEnv] = "-bad-container"
 		},
-		"unknown release field": func(env map[string]string) {
-			env[config.ReleasesJSONEnv] = `{"dar_01JABCDEF0123456789XYZ":{` +
-				`"allowed_principal_ids":["33333333-3333-4333-8333-333333333333"],` +
+		"invalid port": func(environment map[string]string) {
+			environment[config.PortEnv] = "0"
+		},
+		"unknown release field": func(environment map[string]string) {
+			environment[config.ReleasesJSONEnv] = `{"dar_01JABCDEF0123456789XYZ":{` +
+				`"allowed_subjects":["customer:001"],` +
 				`"blob_name":"releases/example.dar","download_name":"example.dar",` +
 				`"surprise":true}}`
 		},
-		"unsafe blob path": func(env map[string]string) {
-			env[config.ReleasesJSONEnv] = `{"dar_01JABCDEF0123456789XYZ":{` +
-				`"allowed_principal_ids":["33333333-3333-4333-8333-333333333333"],` +
+		"unsafe blob path": func(environment map[string]string) {
+			environment[config.ReleasesJSONEnv] = `{"dar_01JABCDEF0123456789XYZ":{` +
+				`"allowed_subjects":["customer:001"],` +
 				`"blob_name":"../example.dar","download_name":"example.dar"}}`
 		},
-		"unsafe download name": func(env map[string]string) {
-			env[config.ReleasesJSONEnv] = `{"dar_01JABCDEF0123456789XYZ":{` +
-				`"allowed_principal_ids":["33333333-3333-4333-8333-333333333333"],` +
+		"unsafe download name": func(environment map[string]string) {
+			environment[config.ReleasesJSONEnv] = `{"dar_01JABCDEF0123456789XYZ":{` +
+				`"allowed_subjects":["customer:001"],` +
 				`"blob_name":"releases/example.dar","download_name":"example.txt"}}`
 		},
-		"empty allowlist": func(env map[string]string) {
-			env[config.ReleasesJSONEnv] = `{"dar_01JABCDEF0123456789XYZ":{` +
-				`"allowed_principal_ids":[],"blob_name":"releases/example.dar",` +
+		"empty allowlist": func(environment map[string]string) {
+			environment[config.ReleasesJSONEnv] = `{"dar_01JABCDEF0123456789XYZ":{` +
+				`"allowed_subjects":[],"blob_name":"releases/example.dar",` +
 				`"download_name":"example.dar"}}`
 		},
-		"duplicate principal": func(env map[string]string) {
-			env[config.ReleasesJSONEnv] = `{"dar_01JABCDEF0123456789XYZ":{` +
-				`"allowed_principal_ids":["33333333-3333-4333-8333-333333333333",` +
-				`"33333333-3333-4333-8333-333333333333"],` +
+		"duplicate subject": func(environment map[string]string) {
+			environment[config.ReleasesJSONEnv] = `{"dar_01JABCDEF0123456789XYZ":{` +
+				`"allowed_subjects":["customer:001","customer:001"],` +
 				`"blob_name":"releases/example.dar","download_name":"example.dar"}}`
 		},
-		"oversized policy": func(env map[string]string) {
-			env[config.ReleasesJSONEnv] = `{"x":"` + strings.Repeat("a", 65*1024) + `"}`
+		"control subject": func(environment map[string]string) {
+			environment[config.ReleasesJSONEnv] = `{"dar_01JABCDEF0123456789XYZ":{` +
+				`"allowed_subjects":["customer:\u0001"],` +
+				`"blob_name":"releases/example.dar","download_name":"example.dar"}}`
+		},
+		"empty subject": func(environment map[string]string) {
+			environment[config.ReleasesJSONEnv] = `{"dar_01JABCDEF0123456789XYZ":{` +
+				`"allowed_subjects":[""],` +
+				`"blob_name":"releases/example.dar","download_name":"example.dar"}}`
+		},
+		"oversized subject": func(environment map[string]string) {
+			environment[config.ReleasesJSONEnv] = `{"dar_01JABCDEF0123456789XYZ":{` +
+				`"allowed_subjects":["` + strings.Repeat("s", config.MaxOIDCSubjectBytes+1) + `"],` +
+				`"blob_name":"releases/example.dar","download_name":"example.dar"}}`
+		},
+		"oversized policy": func(environment map[string]string) {
+			environment[config.ReleasesJSONEnv] = `{"x":"` + strings.Repeat("a", 65*1024) + `"}`
 		},
 	}
 
@@ -125,9 +168,9 @@ func TestParseEnvironmentRejectsUnsafeOrAmbiguousInputs(t *testing.T) {
 		name, mutate := name, mutate
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			env := validEnvironment()
-			mutate(env)
-			if _, err := config.ParseEnvironment(env); err == nil {
+			environment := validEnvironment()
+			mutate(environment)
+			if _, err := config.ParseEnvironment(environment); err == nil {
 				t.Fatal("ParseEnvironment() error = nil, want rejection")
 			}
 		})
@@ -137,22 +180,39 @@ func TestParseEnvironmentRejectsUnsafeOrAmbiguousInputs(t *testing.T) {
 func TestParseEnvironmentRejectsDuplicateBlobAndDownloadNames(t *testing.T) {
 	t.Parallel()
 
-	base := validEnvironment()
-	base[config.ReleasesJSONEnv] = `{
+	environment := validEnvironment()
+	environment[config.ReleasesJSONEnv] = `{
       "dar_01JABCDEF0123456789XYZ": {
-        "allowed_principal_ids": ["33333333-3333-4333-8333-333333333333"],
+        "allowed_subjects": ["customer:001"],
         "blob_name": "releases/example.dar",
         "download_name": "example.dar"
       },
       "dar_01JABCDEF0123456789XYA": {
-        "allowed_principal_ids": ["44444444-4444-4444-8444-444444444444"],
+        "allowed_subjects": ["customer:002"],
         "blob_name": "releases/example.dar",
         "download_name": "example.dar"
       }
     }`
 
-	if _, err := config.ParseEnvironment(base); err == nil {
+	if _, err := config.ParseEnvironment(environment); err == nil {
 		t.Fatal("ParseEnvironment() error = nil, want duplicate rejection")
+	}
+}
+
+func TestParseEnvironmentPreservesDistinctSubjectCase(t *testing.T) {
+	t.Parallel()
+
+	environment := validEnvironment()
+	environment[config.ReleasesJSONEnv] = `{"dar_01JABCDEF0123456789XYZ":{` +
+		`"allowed_subjects":["Customer:001","customer:001"],` +
+		`"blob_name":"releases/example.dar","download_name":"example.dar"}}`
+	cfg, err := config.ParseEnvironment(environment)
+	if err != nil {
+		t.Fatalf("ParseEnvironment() error = %v", err)
+	}
+	release, ok := cfg.Release(releaseID)
+	if !ok || !release.Allows("Customer:001") || !release.Allows("customer:001") {
+		t.Fatalf("release case-sensitive allowlist = %#v", release)
 	}
 }
 
@@ -166,7 +226,7 @@ func TestLoadEnvironmentReadsOnlyDocumentedValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadEnvironment() error = %v", err)
 	}
-	if cfg.Port != 8081 || cfg.ReleaseCount() != 1 {
+	if cfg.Port != 8081 || cfg.ReleaseCount() != 1 || cfg.OIDCIssuer != oidcIssuer {
 		t.Fatalf("config = %#v", cfg)
 	}
 }
@@ -192,7 +252,7 @@ func TestParseEnvironmentRejectsAdditionalUnsafeBlobForms(t *testing.T) {
 			t.Parallel()
 			environment := validEnvironment()
 			environment[config.ReleasesJSONEnv] = `{"dar_01JABCDEF0123456789XYZ":{` +
-				`"allowed_principal_ids":["33333333-3333-4333-8333-333333333333"],` +
+				`"allowed_subjects":["customer:001"],` +
 				`"blob_name":` + strconv.Quote(blobName) + `,"download_name":"example.dar"}}`
 			if _, err := config.ParseEnvironment(environment); err == nil {
 				t.Fatalf("accepted unsafe blob name %q", blobName)
@@ -206,7 +266,7 @@ func TestParseEnvironmentRejectsDuplicateJSONKeys(t *testing.T) {
 
 	environment := validEnvironment()
 	environment[config.ReleasesJSONEnv] = `{"dar_01JABCDEF0123456789XYZ":{` +
-		`"allowed_principal_ids":["33333333-3333-4333-8333-333333333333"],` +
+		`"allowed_subjects":["customer:001"],` +
 		`"blob_name":"releases/example.dar","blob_name":"releases/other.dar",` +
 		`"download_name":"example.dar"}}`
 	if _, err := config.ParseEnvironment(environment); err == nil {

@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	testTenantID          = "11111111-1111-4111-8111-111111111111"
+	testOIDCIssuer        = "https://identity.example.com/realms/customers/"
 	testManagedIdentityID = "22222222-2222-4222-8222-222222222222"
-	testPrincipalID       = "33333333-3333-4333-8333-333333333333"
+	testAllowedSubject    = "customer:Case-Sensitive-001"
 	testBlobName          = "releases/2026-08/example.dar"
 )
 
@@ -73,12 +73,12 @@ func (factory *fakeContainer) Blob(blobName string) sdkBlobClient {
 func testConfig(t *testing.T) config.Config {
 	t.Helper()
 	cfg, err := config.ParseEnvironment(map[string]string{
-		config.TenantIDEnv:                testTenantID,
+		config.OIDCIssuerEnv:              testOIDCIssuer,
 		config.StorageAccountNameEnv:      "stdardownloadpoc01",
 		config.StorageContainerEnv:        "dar-releases",
 		config.ManagedIdentityClientIDEnv: testManagedIdentityID,
 		config.ReleasesJSONEnv: `{"dar_01JABCDEF0123456789XYZ":{` +
-			`"allowed_principal_ids":["` + testPrincipalID + `"],` +
+			`"allowed_subjects":["` + testAllowedSubject + `"],` +
 			`"blob_name":"` + testBlobName + `","download_name":"example.dar"}}`,
 	})
 	if err != nil {

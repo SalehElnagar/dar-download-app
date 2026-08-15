@@ -3,29 +3,33 @@ package config
 
 import (
 	"errors"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/SalehElnagar/dar-download-app/internal/strictjson"
 )
 
 const (
-	TenantIDEnv                = "HARMONY_DAR_TENANT_ID"
-	StorageAccountNameEnv      = "HARMONY_DAR_STORAGE_ACCOUNT_NAME"
-	StorageContainerEnv        = "HARMONY_DAR_STORAGE_CONTAINER"
-	ManagedIdentityClientIDEnv = "HARMONY_DAR_MANAGED_IDENTITY_CLIENT_ID"
-	ReleasesJSONEnv            = "HARMONY_DAR_RELEASES_JSON"
-	PortEnv                    = "HARMONY_PORT"
+	OIDCIssuerEnv              = "DAR_DOWNLOAD_OIDC_ISSUER"
+	StorageAccountNameEnv      = "DAR_DOWNLOAD_STORAGE_ACCOUNT_NAME"
+	StorageContainerEnv        = "DAR_DOWNLOAD_STORAGE_CONTAINER"
+	ManagedIdentityClientIDEnv = "DAR_DOWNLOAD_MANAGED_IDENTITY_CLIENT_ID"
+	ReleasesJSONEnv            = "DAR_DOWNLOAD_RELEASES_JSON"
+	PortEnv                    = "DAR_DOWNLOAD_PORT"
 
-	DefaultPort       = 8000
-	MaxReleases       = 32
-	MaxPolicyBytes    = 64 * 1024
-	MaxBlobNameBytes  = 1024
-	MaxObjectSize     = int64(256 * 1024 * 1024)
-	MaxStorageSegment = int64(4 * 1024 * 1024)
+	DefaultPort         = 8000
+	MaxReleases         = 32
+	MaxPolicyBytes      = 64 * 1024
+	MaxBlobNameBytes    = 1024
+	MaxOIDCIssuerBytes  = 2048
+	MaxOIDCSubjectBytes = 255
+	MaxObjectSize       = int64(256 * 1024 * 1024)
+	MaxStorageSegment   = int64(4 * 1024 * 1024)
 )
 
 var (
@@ -41,7 +45,7 @@ var ErrInvalid = errors.New("invalid DAR download configuration")
 
 // Config is the immutable startup policy exposed to the application.
 type Config struct {
-	TenantID                string
+	OIDCIssuer              string
 	StorageAccountName      string
 	StorageContainer        string
 	ManagedIdentityClientID string
@@ -49,17 +53,17 @@ type Config struct {
 	releases                map[string]ReleasePolicy
 }
 
-// ReleasePolicy binds one opaque route to one Blob, filename, and principal set.
+// ReleasePolicy binds one opaque route to one Blob, filename, and subject set.
 type ReleasePolicy struct {
-	ID           string
-	BlobName     string
-	DownloadName string
-	allowed      map[string]struct{}
+	ID              string
+	BlobName        string
+	DownloadName    string
+	allowedSubjects map[string]struct{}
 }
 
-// Allows reports whether the exact canonical principal is entitled to the release.
-func (release ReleasePolicy) Allows(principalID string) bool {
-	_, ok := release.allowed[principalID]
+// Allows reports whether the exact case-sensitive subject is entitled to the release.
+func (release ReleasePolicy) Allows(subject string) bool {
+	_, ok := release.allowedSubjects[subject]
 	return ok
 }
 
@@ -79,16 +83,34 @@ func IsReleaseID(value string) bool {
 	return releaseIDPattern.MatchString(value)
 }
 
-// IsCanonicalUUID reports whether value is a lowercase canonical UUID string.
-func IsCanonicalUUID(value string) bool {
+func isCanonicalUUID(value string) bool {
 	return uuidPattern.MatchString(value)
+}
+
+// IsValidOIDCIssuer reports whether value is one exact bounded HTTPS issuer URL.
+func IsValidOIDCIssuer(value string) bool {
+	if !validBoundedText(value, MaxOIDCIssuerBytes) {
+		return false
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.Hostname() == "" ||
+		parsed.User != nil || parsed.Opaque != "" || parsed.RawQuery != "" || parsed.ForceQuery ||
+		parsed.Fragment != "" || parsed.RawFragment != "" || parsed.String() != value {
+		return false
+	}
+	return validControlFree(parsed.Path)
+}
+
+// IsValidOIDCSubject reports whether value is one bounded opaque OIDC subject.
+func IsValidOIDCSubject(value string) bool {
+	return validBoundedText(value, MaxOIDCSubjectBytes)
 }
 
 // LoadEnvironment reads only the documented environment variables.
 func LoadEnvironment() (Config, error) {
 	environment := make(map[string]string, 6)
 	for _, name := range []string{
-		TenantIDEnv,
+		OIDCIssuerEnv,
 		StorageAccountNameEnv,
 		StorageContainerEnv,
 		ManagedIdentityClientIDEnv,
@@ -105,7 +127,7 @@ func LoadEnvironment() (Config, error) {
 // ParseEnvironment constructs a complete policy or returns ErrInvalid.
 func ParseEnvironment(environment map[string]string) (Config, error) {
 	required := []string{
-		TenantIDEnv,
+		OIDCIssuerEnv,
 		StorageAccountNameEnv,
 		StorageContainerEnv,
 		ManagedIdentityClientIDEnv,
@@ -116,8 +138,8 @@ func ParseEnvironment(environment map[string]string) (Config, error) {
 			return Config{}, ErrInvalid
 		}
 	}
-	if !IsCanonicalUUID(environment[TenantIDEnv]) ||
-		!IsCanonicalUUID(environment[ManagedIdentityClientIDEnv]) ||
+	if !IsValidOIDCIssuer(environment[OIDCIssuerEnv]) ||
+		!isCanonicalUUID(environment[ManagedIdentityClientIDEnv]) ||
 		!storageAccountPattern.MatchString(environment[StorageAccountNameEnv]) ||
 		!validContainerName(environment[StorageContainerEnv]) {
 		return Config{}, ErrInvalid
@@ -137,7 +159,7 @@ func ParseEnvironment(environment map[string]string) (Config, error) {
 		return Config{}, ErrInvalid
 	}
 	return Config{
-		TenantID:                environment[TenantIDEnv],
+		OIDCIssuer:              environment[OIDCIssuerEnv],
 		StorageAccountName:      environment[StorageAccountNameEnv],
 		StorageContainer:        environment[StorageContainerEnv],
 		ManagedIdentityClientID: environment[ManagedIdentityClientIDEnv],
@@ -147,9 +169,9 @@ func ParseEnvironment(environment map[string]string) (Config, error) {
 }
 
 type releaseDocument struct {
-	AllowedPrincipalIDs []string `json:"allowed_principal_ids"`
-	BlobName            string   `json:"blob_name"`
-	DownloadName        string   `json:"download_name"`
+	AllowedSubjects []string `json:"allowed_subjects"`
+	BlobName        string   `json:"blob_name"`
+	DownloadName    string   `json:"download_name"`
 }
 
 func parseReleases(raw string) (map[string]ReleasePolicy, error) {
@@ -168,7 +190,7 @@ func parseReleases(raw string) (map[string]ReleasePolicy, error) {
 		if !IsReleaseID(releaseID) ||
 			!validBlobName(document.BlobName) ||
 			!downloadNamePattern.MatchString(document.DownloadName) ||
-			len(document.AllowedPrincipalIDs) == 0 {
+			len(document.AllowedSubjects) == 0 {
 			return nil, ErrInvalid
 		}
 		if _, exists := seenBlobs[document.BlobName]; exists {
@@ -180,24 +202,37 @@ func parseReleases(raw string) (map[string]ReleasePolicy, error) {
 		seenBlobs[document.BlobName] = struct{}{}
 		seenDownloads[document.DownloadName] = struct{}{}
 
-		allowed := make(map[string]struct{}, len(document.AllowedPrincipalIDs))
-		for _, principalID := range document.AllowedPrincipalIDs {
-			if !IsCanonicalUUID(principalID) {
+		allowedSubjects := make(map[string]struct{}, len(document.AllowedSubjects))
+		for _, subject := range document.AllowedSubjects {
+			if !IsValidOIDCSubject(subject) {
 				return nil, ErrInvalid
 			}
-			if _, duplicate := allowed[principalID]; duplicate {
+			if _, duplicate := allowedSubjects[subject]; duplicate {
 				return nil, ErrInvalid
 			}
-			allowed[principalID] = struct{}{}
+			allowedSubjects[subject] = struct{}{}
 		}
 		releases[releaseID] = ReleasePolicy{
-			ID:           releaseID,
-			BlobName:     document.BlobName,
-			DownloadName: document.DownloadName,
-			allowed:      allowed,
+			ID:              releaseID,
+			BlobName:        document.BlobName,
+			DownloadName:    document.DownloadName,
+			allowedSubjects: allowedSubjects,
 		}
 	}
 	return releases, nil
+}
+
+func validBoundedText(value string, maximumBytes int) bool {
+	return value != "" && len(value) <= maximumBytes && utf8.ValidString(value) && validControlFree(value)
+}
+
+func validControlFree(value string) bool {
+	for _, character := range value {
+		if unicode.IsControl(character) {
+			return false
+		}
+	}
+	return true
 }
 
 func validContainerName(value string) bool {

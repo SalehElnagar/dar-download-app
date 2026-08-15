@@ -92,4 +92,19 @@ if [[ $(grep -c -- '-fuzztime=100000x' scripts/prebuild.sh) != "3" ]] ||
   exit 1
 fi
 
+for local_path in .agents .specify specs; do
+  tracked_local=$(git ls-files -- "$local_path")
+  if [[ -n "$tracked_local" ]]; then
+    printf 'local-only operation path is tracked: %s\n' "$local_path" >&2
+    exit 1
+  fi
+  if ! grep -Fxq "$local_path/" .gitignore ||
+    ! grep -Fxq "$local_path" .dockerignore ||
+    ! grep -Fq -- "--exclude $local_path" scripts/prebuild.sh ||
+    ! grep -Fq -- "--skip-dirs $local_path" scripts/prebuild.sh; then
+    printf 'local-only operation path is not excluded from product traversal: %s\n' "$local_path" >&2
+    exit 1
+  fi
+done
+
 printf '%s\n' "security workflow order and source digest checks passed."

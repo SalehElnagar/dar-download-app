@@ -31,7 +31,7 @@ func TestLocalMarkdownLinksResolve(t *testing.T) {
 		if walkErr != nil {
 			return walkErr
 		}
-		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == ".security" || entry.Name() == ".agents") {
+		if entry.IsDir() && isLocalOnlyDirectory(entry.Name()) {
 			return filepath.SkipDir
 		}
 		if entry.IsDir() || filepath.Ext(path) != ".md" {
@@ -50,7 +50,18 @@ func TestLocalMarkdownLinksResolve(t *testing.T) {
 				t.Errorf("%s contains absolute local link %q", path, target)
 				continue
 			}
-			if _, statErr := os.Stat(filepath.Clean(filepath.Join(filepath.Dir(path), target))); statErr != nil {
+			resolved := filepath.Clean(filepath.Join(filepath.Dir(path), target))
+			relative, relativeErr := filepath.Rel(root, resolved)
+			if relativeErr != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+				t.Errorf("%s contains out-of-repository link %q", path, target)
+				continue
+			}
+			first := strings.Split(filepath.ToSlash(relative), "/")[0]
+			if first == ".agents" || first == ".specify" || first == "specs" {
+				t.Errorf("%s links to local-only path %q", path, target)
+				continue
+			}
+			if _, statErr := os.Stat(resolved); statErr != nil {
 				t.Errorf("%s contains unresolved local link %q: %v", path, target, statErr)
 			}
 		}
@@ -94,12 +105,9 @@ func TestWorkflowActionsUseFullCommitPins(t *testing.T) {
 	}
 }
 
-func TestContractsDescribeBothApplicationRoutes(t *testing.T) {
+func TestCanonicalContractDescribesBothApplicationRoutes(t *testing.T) {
 	root := repositoryRoot(t)
-	paths := []string{
-		filepath.Join(root, "api", "openapi.yaml"),
-		filepath.Join(root, "specs", "001-secure-dar-download", "contracts", "http-api.yaml"),
-	}
+	paths := []string{filepath.Join(root, "api", "openapi.yaml")}
 	required := []string{
 		"/healthz:",
 		"/v1/releases/{release_id}/download:",
@@ -108,6 +116,7 @@ func TestContractsDescribeBothApplicationRoutes(t *testing.T) {
 		"'401'",
 		"'403'",
 		"'404'",
+		"method_not_allowed",
 		"'413'",
 		"'416'",
 		"'502'",
@@ -139,7 +148,7 @@ func TestRepositoryExcludesDeploymentAndReleaseArtifacts(t *testing.T) {
 		if walkErr != nil {
 			return walkErr
 		}
-		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == ".security" || entry.Name() == ".agents") {
+		if entry.IsDir() && isLocalOnlyDirectory(entry.Name()) {
 			return filepath.SkipDir
 		}
 		if entry.IsDir() {
@@ -153,6 +162,11 @@ func TestRepositoryExcludesDeploymentAndReleaseArtifacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func isLocalOnlyDirectory(name string) bool {
+	return name == ".git" || name == ".security" || name == ".agents" ||
+		name == ".specify" || name == "specs"
 }
 
 func TestSecurityExceptionRegistryRemainsEmpty(t *testing.T) {

@@ -33,5 +33,7 @@ sbom/
 *.dar
 *.zip
 
-# Spec Kit generates agent-private command wrappers locally
+# Local-only workspaces
 .agents/
+.specify/
+specs/

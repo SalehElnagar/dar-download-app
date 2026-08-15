@@ -54,7 +54,7 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		writeJSON(writer, http.StatusNotFound, "release_not_found")
 		return
 	}
-	principal, authenticated := auth.Authenticate(request.Header, handler.config.TenantID)
+	identity, authenticated := auth.Authenticate(request.Header, handler.config.OIDCIssuer)
 	if !authenticated {
 		writeJSON(writer, http.StatusUnauthorized, "authentication_required")
 		return
@@ -64,7 +64,7 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		writeJSON(writer, http.StatusNotFound, "release_not_found")
 		return
 	}
-	if !release.Allows(principal.ID) {
+	if !release.Allows(identity.Subject) {
 		writeJSON(writer, http.StatusForbidden, "authorization_denied")
 		return
 	}
@@ -228,7 +228,7 @@ func setSecurityHeaders(headers http.Header) {
 }
 
 func writeHealth(writer http.ResponseWriter) {
-	const body = `{"service":"harmony-dar-download","status":"ok"}`
+	const body = `{"service":"dar-download","status":"ok"}`
 	writer.Header().Set("Cache-Control", "no-store")
 	writer.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	writer.Header().Set("Content-Type", "application/json")

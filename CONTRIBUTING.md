@@ -1,7 +1,7 @@
 # Contributing
 
-Keep changes within the application boundary. Do not add Azure or Entra provisioning, live
-tenant values, customer data, DAR files, deployment state, credentials, or generated security
+Keep changes within the application boundary. Do not add cloud or identity-provider provisioning,
+live issuer values, customer data, DAR files, deployment state, credentials, or generated security
 evidence.
 
 For behavior changes:
