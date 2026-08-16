@@ -5,8 +5,9 @@ intentional breaking POC contract and have no legacy aliases.
 
 | Variable | Required | Contract |
 | --- | --- | --- |
-| `DAR_DOWNLOAD_TRUSTED_IDENTITY_MODE` | no | `oidc_headers` by default, or the explicitly enabled `azure_container_apps` adapter |
+| `DAR_DOWNLOAD_TRUSTED_IDENTITY_MODE` | no | `oidc_headers` by default, or the explicitly enabled `azure_container_apps` or `azure_container_apps_oidc` adapter |
 | `DAR_DOWNLOAD_OIDC_ISSUER` | yes | Exact HTTPS issuer expected from the trusted OIDC boundary |
+| `DAR_DOWNLOAD_OIDC_PROVIDER_NAME` | mode-specific | Exact custom provider name required only by `azure_container_apps_oidc` |
 | `DAR_DOWNLOAD_AZURE_CONTAINER_APPS_TENANT_ID` | mode-specific | Canonical tenant UUID required only by `azure_container_apps` |
 | `DAR_DOWNLOAD_STORAGE_ACCOUNT_NAME` | yes | Fixed private Azure Blob account name |
 | `DAR_DOWNLOAD_STORAGE_CONTAINER` | yes | Fixed private Azure Blob container name |
@@ -17,9 +18,11 @@ The obsolete `DAR_DOWNLOAD_RELEASES_JSON` setting is not ignored: its presence m
 fail. Remove it when moving to the dynamic path contract. There is no replacement release map,
 subject allowlist, or global allowlist.
 
-The issuer is stored and compared exactly. It must be an absolute HTTPS URL of at most 2,048
-UTF-8 bytes with a non-empty host and no user information, query, fragment, or control
-character. The parser does not normalize it, so a trailing slash is significant.
+The issuer is stored exactly and compared to available trusted evidence without normalization.
+It must be an absolute HTTPS URL of at most 2,048 UTF-8 bytes with a non-empty host and no user
+information, query, fragment, or control character. A trailing slash is significant. In custom
+Container Apps OIDC mode, the principal has no documented issuer field, so deployment readback
+must instead prove that the platform provider metadata uses this exact issuer.
 
 The separately deployed authentication layer owns browser and bearer authentication. The app
 does not implement an authorization-code flow and does not validate customer session or bearer
@@ -38,12 +41,27 @@ Exactly one mode is active for the process:
   one platform-reserved `X-MS-CLIENT-PRINCIPAL` and exactly one
   `X-MS-CLIENT-PRINCIPAL-ID`; if `X-MS-CLIENT-PRINCIPAL-IDP` is present, it must occur exactly
   once with value `aad`. Caller `X-DAR-*` identity assertions make this mode reject the request.
+- `azure_container_apps_oidc` is the custom OpenID Connect Container Apps adapter. Container Apps
+  Authentication must be the sole ingress authentication layer. The app requires exactly one
+  platform-reserved `X-MS-CLIENT-PRINCIPAL`, `X-MS-CLIENT-PRINCIPAL-ID`, and
+  `X-MS-CLIENT-PRINCIPAL-IDP`. The IDP header and decoded `auth_typ` must both byte-exact-match
+  `DAR_DOWNLOAD_OIDC_PROVIDER_NAME`. Caller `X-DAR-*` assertions, missing or duplicate protected
+  headers, and Entra `aad` evidence fail authentication.
 
 Azure mode also requires `DAR_DOWNLOAD_AZURE_CONTAINER_APPS_TENANT_ID`. Both it and the
 platform principal/object IDs use lowercase canonical UUID form. The configured issuer must be
 exactly `https://login.microsoftonline.com/<tenant-id>/v2.0`, which binds the adapter's tenant to
-the same issuer used by the trusted boundary. Generic mode rejects an Azure tenant setting, and
-unknown modes fail startup.
+the same issuer used by the trusted boundary. The custom adapter requires the Azure tenant
+variable to be absent, while the two existing modes reject a custom provider-name setting.
+Generic mode retains its existing Azure-tenant behavior, and unknown modes fail startup.
+
+Microsoft's current Container Apps documentation requires a unique alphanumeric custom provider
+name but its current ARM schema publishes no numeric maximum. This application therefore applies
+a conservative 1-to-32-byte ASCII alphanumeric bound. The name is case-sensitive because it is
+also the provider alias in the callback and protected principal representation; hyphen,
+underscore, dot, whitespace, controls, and Unicode are rejected. The `aad` alias, in any ASCII
+case, is reserved for the separate Entra adapter and is rejected to keep the two trust domains
+unambiguous.
 
 The Azure principal is strict, standard Base64 JSON. Its four top-level field names and each
 claim's `typ` and `val` names are exact and case-sensitive; unknown, missing, duplicate, or
@@ -54,12 +72,26 @@ exactly one object-ID claim (`oid` or the mapped object-identifier URI). Duplica
 duplicate values, malformed claims, a tenant mismatch, or disagreement between the object-ID
 claim and principal-ID header all fail authentication.
 
+The custom-provider principal uses the same strict standard-Base64 exact JSON schema and limits:
+at most 16 KiB encoded, exactly four case-sensitive top-level fields, 1 through 64 claims, and
+claim names/values bounded to 512/4,096 UTF-8 bytes without controls. The app does not interpret
+provider claims or guess a `sub` alias. Microsoft documents `X-MS-CLIENT-PRINCIPAL-ID` as the
+provider-set caller identifier, so that protected header becomes the opaque case-sensitive OIDC
+subject and must satisfy the 1-to-255-byte subject bound.
+
 In provider-neutral mode, `X-DAR-OIDC-Subject` is an opaque, case-sensitive OIDC subject. The app
 accepts one valid UTF-8 value from 1 through 255 bytes with no Unicode control characters. It
-performs no UUID parsing, case folding, trimming, or other normalization. Azure mode deliberately
-maps a canonical object ID into that same internal subject field. Once either adapter produces a
-valid configured issuer and authenticated subject, the app performs no subject-level
-authorization.
+performs no UUID parsing, case folding, trimming, or other normalization. Entra mode deliberately
+maps a canonical object ID into that same internal subject field, while custom Container Apps
+OIDC mode uses the protected platform principal ID verbatim. Once any adapter produces a valid
+configured issuer and authenticated subject, the app performs no subject-level authorization.
+
+For `azure_container_apps_oidc`, `DAR_DOWNLOAD_OIDC_ISSUER` is an exact deployment-owned trust
+label. The platform configuration and authoritative deployment readback must bind the custom
+provider metadata issuer to that exact value. The Go app does not fetch discovery metadata,
+independently validate a token, or receive the custom provider's client ID or client secret. The
+client secret is a Container Apps secret and is prohibited from Go environment variables,
+configuration, request headers, images, and logs.
 
 ## Dynamic Blob-path contract
 

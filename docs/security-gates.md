@@ -13,14 +13,16 @@ cannot be bypassed by an exception. Only after that scan passes does it run:
 - module tidiness and checksum verification;
 - `go vet`, Staticcheck, and a read-only dependency build;
 - complete tests and a 90% core statement-coverage floor;
-- the Go race detector and three bounded native fuzz targets;
+- the Go race detector and five bounded native fuzz targets;
 - the Go vulnerability database and Gosec;
 - repository-specific Semgrep rules with positive and negative controls;
 - Trivy dependency, secret, and configuration scanning;
 - workflow-order checks and a final Gitleaks pass.
 
-Required tools are version-pinned. Downloaded binary assets are checksum-verified. Semgrep and
-ZAP run from digest-pinned images when used by the bootstrap workflow.
+Required tools are version-pinned. Downloaded binary assets are checksum-verified. Semgrep scans
+tracked and untracked candidate product files before publication while retaining explicit
+local-only and repository-metadata exclusions. Semgrep and ZAP run from digest-pinned images when
+used by the bootstrap workflow.
 
 ## Image construction boundary
 

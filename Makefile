@@ -32,10 +32,11 @@ test-security:
 	go test -count=1 -cover ./internal/auth ./internal/blob ./internal/config \
 	  ./internal/download ./internal/httpapi ./internal/strictjson
 	go test -count=1 -race ./...
-	go test -run='^$$' -fuzz=FuzzDownloadTarget -fuzztime=100000x ./internal/httpapi
-	go test -run='^$$' -fuzz=FuzzAuthenticateOIDCHeaders -fuzztime=100000x ./internal/auth
-	go test -run='^$$' -fuzz=FuzzAuthenticateAzureContainerApps -fuzztime=100000x ./internal/auth
-	go test -run='^$$' -fuzz=FuzzSelectRange -fuzztime=100000x ./internal/download
+	go test -run='^$$' -fuzz='^FuzzDownloadTarget$$' -fuzztime=100000x ./internal/httpapi
+	go test -run='^$$' -fuzz='^FuzzAuthenticateOIDCHeaders$$' -fuzztime=100000x ./internal/auth
+	go test -run='^$$' -fuzz='^FuzzAuthenticateAzureContainerApps$$' -fuzztime=100000x ./internal/auth
+	go test -run='^$$' -fuzz='^FuzzAuthenticateAzureContainerAppsOIDC$$' -fuzztime=100000x ./internal/auth
+	go test -run='^$$' -fuzz='^FuzzSelectRange$$' -fuzztime=100000x ./internal/download
 
 prebuild:
 	./scripts/prebuild.sh

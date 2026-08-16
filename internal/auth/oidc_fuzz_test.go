@@ -24,9 +24,10 @@ func FuzzAuthenticateOIDCHeaders(f *testing.F) {
 		headers.Set("X-DAR-OIDC-Subject", subject)
 		identity, ok := auth.Authenticate(
 			headers,
-			expectedIssuer,
-			config.TrustedIdentityModeOIDCHeaders,
-			"",
+			auth.BoundaryPolicy{
+				ExpectedIssuer: expectedIssuer,
+				Mode:           config.TrustedIdentityModeOIDCHeaders,
+			},
 		)
 		expectedOK := issuer == expectedIssuer && config.IsValidOIDCSubject(subject)
 		if ok != expectedOK {
@@ -89,9 +90,11 @@ func FuzzAuthenticateAzureContainerApps(f *testing.F) {
 
 		identity, ok := auth.Authenticate(
 			headers,
-			expectedIssuer,
-			config.TrustedIdentityModeAzureContainerApps,
-			expectedTenant,
+			auth.BoundaryPolicy{
+				ExpectedIssuer:        expectedIssuer,
+				Mode:                  config.TrustedIdentityModeAzureContainerApps,
+				ExpectedAzureTenantID: expectedTenant,
+			},
 		)
 		expectedOK := authType == "aad" && tenantClaim == expectedTenant &&
 			canonicalUUID.MatchString(tenantClaim) &&

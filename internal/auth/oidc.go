@@ -18,27 +18,48 @@ type Identity struct {
 	Subject string
 }
 
+// BoundaryPolicy contains the complete deployment-owned identity trust configuration.
+type BoundaryPolicy struct {
+	ExpectedIssuer           string
+	Mode                     config.TrustedIdentityMode
+	ExpectedAzureTenantID    string
+	ExpectedOIDCProviderName string
+}
+
 // Authenticate returns one exact OIDC identity from the configured trusted boundary.
-func Authenticate(
-	headers http.Header,
-	expectedIssuer string,
-	mode config.TrustedIdentityMode,
-	expectedAzureTenantID string,
-) (Identity, bool) {
-	switch mode {
+func Authenticate(headers http.Header, policy BoundaryPolicy) (Identity, bool) {
+	switch policy.Mode {
 	case config.TrustedIdentityModeOIDCHeaders:
-		if expectedAzureTenantID != "" || hasAzureContainerAppsIdentityHeaders(headers) {
+		if policy.ExpectedAzureTenantID != "" || policy.ExpectedOIDCProviderName != "" ||
+			hasAzureContainerAppsIdentityHeaders(headers) {
 			return Identity{}, false
 		}
-		return authenticateOIDCHeaders(headers, expectedIssuer)
+		return authenticateOIDCHeaders(headers, policy.ExpectedIssuer)
 	case config.TrustedIdentityModeAzureContainerApps:
-		if len(headers.Values(IssuerHeader)) != 0 || len(headers.Values(SubjectHeader)) != 0 {
+		if policy.ExpectedOIDCProviderName != "" || hasGenericOIDCIdentityHeaders(headers) {
 			return Identity{}, false
 		}
-		return authenticateAzureContainerApps(headers, expectedIssuer, expectedAzureTenantID)
+		return authenticateAzureContainerApps(
+			headers,
+			policy.ExpectedIssuer,
+			policy.ExpectedAzureTenantID,
+		)
+	case config.TrustedIdentityModeAzureContainerAppsOIDC:
+		if policy.ExpectedAzureTenantID != "" || hasGenericOIDCIdentityHeaders(headers) {
+			return Identity{}, false
+		}
+		return authenticateAzureContainerAppsOIDC(
+			headers,
+			policy.ExpectedIssuer,
+			policy.ExpectedOIDCProviderName,
+		)
 	default:
 		return Identity{}, false
 	}
+}
+
+func hasGenericOIDCIdentityHeaders(headers http.Header) bool {
+	return len(headers.Values(IssuerHeader)) != 0 || len(headers.Values(SubjectHeader)) != 0
 }
 
 func authenticateOIDCHeaders(headers http.Header, expectedIssuer string) (Identity, bool) {

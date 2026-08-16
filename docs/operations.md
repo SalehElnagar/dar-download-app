@@ -9,11 +9,11 @@ or bearer flow.
 
 After validating the login or token, the deployment selects exactly one trusted-identity mode.
 The default `oidc_headers` mode receives one stripped-and-injected `X-DAR-OIDC-Issuer` and
-`X-DAR-OIDC-Subject` pair. The optional `azure_container_apps` mode instead accepts only the
-platform-reserved Container Apps principal representation and maps its tenant-bound object ID
-into the same internal issuer-and-subject model. Only private traffic from the configured layer
-may reach the app. The app exact-matches the configured issuer and validates one authenticated
-subject before any Blob access.
+`X-DAR-OIDC-Subject` pair. The optional `azure_container_apps` mode accepts an Entra-bound
+Container Apps principal. The optional `azure_container_apps_oidc` mode accepts one custom OpenID
+Connect provider's Container Apps principal. Both platform adapters map protected evidence into
+the same internal issuer-and-subject model. Only private traffic from the configured layer may
+reach the app. The app validates one authenticated subject before any Blob access.
 
 The platform repository owns the OIDC layer, identity-provider configuration, private ingress,
 networking, DNS, Blob account, managed identity, RBAC, monitoring, and deployment revision.
@@ -41,6 +41,8 @@ Authentication is the only application access decision. After one trusted identi
 the Go service performs no subject-, version-, or filename-level authorization.
 
 ## Optional Azure Container Apps adapter
+
+### Entra adapter
 
 `azure_container_apps` is a deployment adapter, not the future customer identity model. Use it
 only when Azure Container Apps Authentication is the sole ingress path. Microsoft documents that
@@ -70,6 +72,55 @@ Container Apps supports a client-secret-free ID-token flow when no client secret
 Microsoft identifies that as an implicit flow and recommends stronger alternatives where
 practical. Treat the zero-credential form as a POC choice: keep the registration dedicated,
 single-tenant, token store disabled, and reassess the browser flow before production promotion.
+
+### Custom OpenID Connect adapter
+
+`azure_container_apps_oidc` supports a non-Entra provider such as Duende IdentityServer while
+keeping the Go application provider-neutral. Azure Container Apps Authentication is the
+confidential interactive relying party. It owns discovery, the browser redirect, exact callback,
+Authorization Code exchange, client authentication, token validation, issuer/audience checks,
+the platform session cookie, and injection of protected principal headers. The Go app never
+receives or implements any of those protocol inputs.
+
+See Microsoft's
+[custom OpenID Connect provider guidance](https://learn.microsoft.com/azure/container-apps/authentication-openid)
+and the principal-header format linked above.
+
+Register a dedicated Duende interactive Web/BFF-style client with the `authorization_code` grant,
+no `client_credentials` grant, and this exact callback:
+
+```text
+https://<container-app-fqdn>/.auth/login/<provider-name>/callback
+```
+
+PKCE is not mandatory for this initial confidential POC client, but that is a platform/client
+decision to revisit before production. The client ID belongs only in the Container Apps auth
+configuration. Store the client secret as a Container Apps secret and reference only its setting
+name through the auth resource's `clientSecretSettingName`; never copy the secret or client ID
+into a `DAR_DOWNLOAD_*` variable, image, request header, application log, or repository file.
+
+Before enabling this mode, read back and verify the deployment as one unit:
+
+- the custom provider map has one enabled provider whose exact alphanumeric key equals
+  `DAR_DOWNLOAD_OIDC_PROVIDER_NAME`;
+- its metadata or explicit endpoints resolve to the intended Duende issuer, and the returned
+  issuer byte-exactly equals `DAR_DOWNLOAD_OIDC_ISSUER`, including any trailing slash;
+- the provider uses the dedicated confidential client and a Container Apps secret reference,
+  with the exact callback above and no credential exposed to the Go container;
+- authentication is required, HTTPS is required, the custom provider is the redirect target,
+  direct ingress bypass is impossible, and only `/healthz` is excluded;
+- `DAR_DOWNLOAD_TRUSTED_IDENTITY_MODE=azure_container_apps_oidc`,
+  `DAR_DOWNLOAD_OIDC_PROVIDER_NAME`, and `DAR_DOWNLOAD_OIDC_ISSUER` agree with the auth resource;
+- `DAR_DOWNLOAD_AZURE_CONTAINER_APPS_TENANT_ID` is absent, token storage and token-forwarding
+  headers are disabled unless separately reviewed, and caller `X-DAR-*` assertions cannot reach
+  the app as trusted identity evidence.
+
+The Go adapter requires exactly one protected principal, principal ID, and IDP header. It
+exact-matches the provider name in both the IDP header and decoded `auth_typ`, validates the
+bounded exact principal schema, and uses only the platform principal ID as its opaque subject.
+The configured issuer is a deployment-owned trust label: local tests cannot prove that the live
+Container Apps provider metadata is bound to it, so authoritative auth-resource readback and a
+real Duende login remain mandatory live evidence.
 
 ## Blob layout and access
 
@@ -135,7 +186,7 @@ metric or log label.
 ## Rollout and rollback
 
 Deploy by immutable image digest, not a mutable tag. Start with a non-production revision and a
-synthetic Blob using the exact two-segment layout. Verify both trusted identity modes in local or
+synthetic Blob using the exact two-segment layout. Verify all trusted identity modes in local or
 integration tests, live upstream authentication, wrong-tenant and spoof-header denial, a valid
 authenticated missing-object response, full download, resume, byte checksum, private storage
 reachability, and audit logs. A second person's live credentials are not required to prove the

@@ -56,9 +56,12 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 	}
 	_, authenticated := auth.Authenticate(
 		request.Header,
-		handler.config.OIDCIssuer,
-		handler.config.TrustedIdentityMode,
-		handler.config.AzureContainerAppsTenantID,
+		auth.BoundaryPolicy{
+			ExpectedIssuer:           handler.config.OIDCIssuer,
+			Mode:                     handler.config.TrustedIdentityMode,
+			ExpectedAzureTenantID:    handler.config.AzureContainerAppsTenantID,
+			ExpectedOIDCProviderName: handler.config.OIDCProviderName,
+		},
 	)
 	if !authenticated {
 		writeJSON(writer, http.StatusUnauthorized, "authentication_required")

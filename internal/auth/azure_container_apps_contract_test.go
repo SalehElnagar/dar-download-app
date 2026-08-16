@@ -61,9 +61,11 @@ func azureClaims(tenantType, objectType, tenantID, objectID string) []map[string
 func authenticateAzure(headers http.Header) (auth.Identity, bool) {
 	return auth.Authenticate(
 		headers,
-		azureIssuer,
-		config.TrustedIdentityModeAzureContainerApps,
-		azureTenantID,
+		auth.BoundaryPolicy{
+			ExpectedIssuer:        azureIssuer,
+			Mode:                  config.TrustedIdentityModeAzureContainerApps,
+			ExpectedAzureTenantID: azureTenantID,
+		},
 	)
 }
 
@@ -139,6 +141,18 @@ func TestAuthenticateAzureContainerAppsRejectsMalformedOrAmbiguousEvidence(t *te
 		"invalid base64": func(t *testing.T) http.Header {
 			headers := valid(t)
 			headers.Set("X-MS-CLIENT-PRINCIPAL", "not base64")
+			return headers
+		},
+		"base64 with carriage return": func(t *testing.T) http.Header {
+			headers := valid(t)
+			encoded := headers.Get("X-MS-CLIENT-PRINCIPAL")
+			headers.Set("X-MS-CLIENT-PRINCIPAL", encoded[:4]+"\r"+encoded[4:])
+			return headers
+		},
+		"base64 with line feed": func(t *testing.T) http.Header {
+			headers := valid(t)
+			encoded := headers.Get("X-MS-CLIENT-PRINCIPAL")
+			headers.Set("X-MS-CLIENT-PRINCIPAL", encoded[:4]+"\n"+encoded[4:])
 			return headers
 		},
 		"oversized principal": func(t *testing.T) http.Header {
@@ -281,9 +295,11 @@ func TestAuthenticateAzureContainerAppsRequiresMatchingIssuerAndTenantPolicy(t *
 	for _, test := range tests {
 		if identity, ok := auth.Authenticate(
 			headers,
-			test.issuer,
-			config.TrustedIdentityModeAzureContainerApps,
-			test.tenantID,
+			auth.BoundaryPolicy{
+				ExpectedIssuer:        test.issuer,
+				Mode:                  config.TrustedIdentityModeAzureContainerApps,
+				ExpectedAzureTenantID: test.tenantID,
+			},
 		); ok {
 			t.Fatalf("Authenticate() = %#v, true for issuer %q and tenant %q", identity, test.issuer, test.tenantID)
 		}

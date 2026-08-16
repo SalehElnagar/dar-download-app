@@ -23,9 +23,7 @@ func TestAuthenticateAcceptsOneExactOIDCIdentity(t *testing.T) {
 	subject := "customer:Case-Sensitive-001"
 	identity, ok := auth.Authenticate(
 		oidcHeaders(issuer, subject),
-		issuer,
-		config.TrustedIdentityModeOIDCHeaders,
-		"",
+		auth.BoundaryPolicy{ExpectedIssuer: issuer, Mode: config.TrustedIdentityModeOIDCHeaders},
 	)
 	if !ok || identity.Issuer != issuer || identity.Subject != subject {
 		t.Fatalf("Authenticate() = %#v, %t", identity, ok)
@@ -64,9 +62,10 @@ func TestAuthenticateRejectsAmbiguousOrUntrustedOIDCInputs(t *testing.T) {
 			}
 			if identity, ok := auth.Authenticate(
 				headers,
-				expected,
-				config.TrustedIdentityModeOIDCHeaders,
-				"",
+				auth.BoundaryPolicy{
+					ExpectedIssuer: expected,
+					Mode:           config.TrustedIdentityModeOIDCHeaders,
+				},
 			); ok {
 				t.Fatalf("Authenticate() = %#v, true; want rejection", identity)
 			}
@@ -78,14 +77,15 @@ func TestProviderSpecificIdentityHeadersHaveNoAlias(t *testing.T) {
 	t.Parallel()
 
 	legacyHeader := "X-" + "MS-CLIENT-PRINCIPAL"
-	headers := make(http.Header)
+	headers := oidcHeaders("https://identity.example.com", "customer:exact")
 	headers.Set(legacyHeader, "synthetic")
 	headers.Set(legacyHeader+"-ID", "customer:legacy")
 	if identity, ok := auth.Authenticate(
 		headers,
-		"https://identity.example.com",
-		config.TrustedIdentityModeOIDCHeaders,
-		"",
+		auth.BoundaryPolicy{
+			ExpectedIssuer: "https://identity.example.com",
+			Mode:           config.TrustedIdentityModeOIDCHeaders,
+		},
 	); ok {
 		t.Fatalf("Authenticate() = %#v, true; want rejection", identity)
 	}

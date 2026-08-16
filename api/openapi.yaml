@@ -1,13 +1,16 @@
 openapi: 3.0.3
 info:
   title: DAR Download Application
-  version: 3.0.0
+  version: 3.1.0
   description: >-
     Private streaming service behind a separately deployed OIDC authentication layer. External
     clients authenticate there with a browser session or bearer flow. That trusted layer
     validates the login or token, strips caller-supplied identity headers, and injects the
-    deployment-selected internal identity representation on private app ingress. The app does
-    not implement a browser authorization flow or validate customer session or bearer tokens.
+    deployment-selected internal identity representation on private app ingress. A custom OpenID
+    Connect deployment may use Azure Container Apps Authentication as the confidential
+    Authorization Code relying party. The app does not implement that browser flow, exchange an
+    authorization code, receive a client credential, or validate customer session or bearer
+    tokens.
     Every authenticated identity may download every valid exact Blob path in the configured
     container. File and version names are selectors, not authorization boundaries. Every
     non-GET method receives a bounded 405 method_not_allowed response.
@@ -49,13 +52,16 @@ paths:
           One deployment-selected internal adapter maps authenticated upstream evidence to the
           application's configured issuer and one authenticated subject. The default adapter
           uses X-DAR-OIDC-Issuer and X-DAR-OIDC-Subject on private ingress. The optional Azure
-          Container Apps adapter uses only platform-reserved principal headers and rejects caller
-          X-DAR assertions. These internal representations are never public credentials or
-          caller-controlled request parameters, and direct app ingress is forbidden. No
-          subject-level authorization is performed after authentication.
+          Container Apps adapters use only platform-reserved principal headers and reject caller
+          X-DAR assertions. The custom OpenID Connect adapter additionally exact-matches one
+          deployment-configured provider name in the protected IDP and principal representations.
+          These internal representations are never public credentials or caller-controlled
+          request parameters, and direct app ingress is forbidden. No subject-level authorization
+          is performed after authentication.
         modes:
           - oidc_headers
           - azure_container_apps
+          - azure_container_apps_oidc
       parameters:
         - name: version
           in: path
@@ -165,8 +171,10 @@ components:
       openIdConnectUrl: https://identity.example.invalid/.well-known/openid-configuration
       description: >-
         External authentication requirement enforced by the trusted upstream OIDC layer. The
-        layer may use a browser session or validate a bearer token. The app never processes this
-        public credential. Clients must not send or rely on internal identity headers.
+        layer may use a browser session or validate a bearer token. Azure Container Apps may own
+        a custom provider's confidential Authorization Code flow and client secret. The app never
+        processes those public credentials or protocol artifacts. Clients must not send or rely
+        on internal identity headers.
   schemas:
     Health:
       type: object

@@ -13,29 +13,29 @@ import (
 )
 
 const (
-	azurePrincipalHeader         = "X-MS-CLIENT-PRINCIPAL"
-	azurePrincipalIDHeader       = "X-MS-CLIENT-PRINCIPAL-ID"
-	azurePrincipalIDPHeader      = "X-MS-CLIENT-PRINCIPAL-IDP"
-	azurePrincipalHeaderPrefix   = "X-MS-CLIENT-PRINCIPAL"
-	azureAuthenticationType      = "aad"
-	maxAzurePrincipalHeaderBytes = 16 * 1024
-	maxAzurePrincipalClaims      = 64
-	maxAzureClaimTypeBytes       = 512
-	maxAzureClaimValueBytes      = 4096
-	mappedAzureObjectIDClaim     = "http://schemas.microsoft.com/identity/claims/objectidentifier"
-	mappedAzureTenantIDClaim     = "http://schemas.microsoft.com/identity/claims/tenantid"
-	standardAzureObjectIDClaim   = "oid"
-	standardAzureTenantIDClaim   = "tid"
+	containerAppsPrincipalHeader         = "X-MS-CLIENT-PRINCIPAL"
+	containerAppsPrincipalIDHeader       = "X-MS-CLIENT-PRINCIPAL-ID"
+	containerAppsPrincipalIDPHeader      = "X-MS-CLIENT-PRINCIPAL-IDP"
+	containerAppsPrincipalHeaderPrefix   = "X-MS-CLIENT-PRINCIPAL"
+	azureAuthenticationType              = "aad"
+	maxContainerAppsPrincipalHeaderBytes = 16 * 1024
+	maxContainerAppsPrincipalClaims      = 64
+	maxContainerAppsClaimTypeBytes       = 512
+	maxContainerAppsClaimValueBytes      = 4096
+	mappedAzureObjectIDClaim             = "http://schemas.microsoft.com/identity/claims/objectidentifier"
+	mappedAzureTenantIDClaim             = "http://schemas.microsoft.com/identity/claims/tenantid"
+	standardAzureObjectIDClaim           = "oid"
+	standardAzureTenantIDClaim           = "tid"
 )
 
-type azurePrincipal struct {
-	AuthenticationType string       `json:"auth_typ"`
-	Claims             []azureClaim `json:"claims"`
-	NameType           string       `json:"name_typ"`
-	RoleType           string       `json:"role_typ"`
+type containerAppsPrincipal struct {
+	AuthenticationType string               `json:"auth_typ"`
+	Claims             []containerAppsClaim `json:"claims"`
+	NameType           string               `json:"name_typ"`
+	RoleType           string               `json:"role_typ"`
 }
 
-type azureClaim struct {
+type containerAppsClaim struct {
 	Type  string `json:"typ"`
 	Value string `json:"val"`
 }
@@ -48,12 +48,12 @@ func authenticateAzureContainerApps(
 	if !config.IsAzureContainerAppsIssuer(expectedIssuer, expectedTenantID) {
 		return Identity{}, false
 	}
-	principalValues := headers.Values(azurePrincipalHeader)
-	principalIDValues := headers.Values(azurePrincipalIDHeader)
+	principalValues := headers.Values(containerAppsPrincipalHeader)
+	principalIDValues := headers.Values(containerAppsPrincipalIDHeader)
 	if len(principalValues) != 1 || len(principalIDValues) != 1 {
 		return Identity{}, false
 	}
-	if idpValues := headers.Values(azurePrincipalIDPHeader); len(idpValues) > 1 ||
+	if idpValues := headers.Values(containerAppsPrincipalIDPHeader); len(idpValues) > 1 ||
 		(len(idpValues) == 1 && idpValues[0] != azureAuthenticationType) {
 		return Identity{}, false
 	}
@@ -62,20 +62,20 @@ func authenticateAzureContainerApps(
 		return Identity{}, false
 	}
 	encodedPrincipal := principalValues[0]
-	if encodedPrincipal == "" || len(encodedPrincipal) > maxAzurePrincipalHeaderBytes {
+	if encodedPrincipal == "" || len(encodedPrincipal) > maxContainerAppsPrincipalHeaderBytes {
 		return Identity{}, false
 	}
-	decodedPrincipal, err := base64.StdEncoding.Strict().DecodeString(encodedPrincipal)
-	if err != nil {
+	decodedPrincipal, ok := decodeCanonicalContainerAppsPrincipal(encodedPrincipal)
+	if !ok {
 		return Identity{}, false
 	}
-	if !hasExactAzurePrincipalSchema(decodedPrincipal) {
+	if !hasExactContainerAppsPrincipalSchema(decodedPrincipal) {
 		return Identity{}, false
 	}
-	var principal azurePrincipal
-	if err := strictjson.Decode(decodedPrincipal, maxAzurePrincipalHeaderBytes, &principal); err != nil ||
+	var principal containerAppsPrincipal
+	if err := strictjson.Decode(decodedPrincipal, maxContainerAppsPrincipalHeaderBytes, &principal); err != nil ||
 		principal.AuthenticationType != azureAuthenticationType ||
-		len(principal.Claims) < 1 || len(principal.Claims) > maxAzurePrincipalClaims {
+		len(principal.Claims) < 1 || len(principal.Claims) > maxContainerAppsPrincipalClaims {
 		return Identity{}, false
 	}
 
@@ -84,8 +84,8 @@ func authenticateAzureContainerApps(
 	tenantClaims := 0
 	objectClaims := 0
 	for _, claim := range principal.Claims {
-		if !validAzureClaimText(claim.Type, maxAzureClaimTypeBytes) ||
-			!validAzureClaimText(claim.Value, maxAzureClaimValueBytes) {
+		if !validContainerAppsClaimText(claim.Type, maxContainerAppsClaimTypeBytes) ||
+			!validContainerAppsClaimText(claim.Value, maxContainerAppsClaimValueBytes) {
 			return Identity{}, false
 		}
 		switch claim.Type {
@@ -105,7 +105,15 @@ func authenticateAzureContainerApps(
 	return Identity{Issuer: expectedIssuer, Subject: principalID}, true
 }
 
-func hasExactAzurePrincipalSchema(raw []byte) bool {
+func decodeCanonicalContainerAppsPrincipal(encodedPrincipal string) ([]byte, bool) {
+	decodedPrincipal, err := base64.StdEncoding.Strict().DecodeString(encodedPrincipal)
+	if err != nil || base64.StdEncoding.EncodeToString(decodedPrincipal) != encodedPrincipal {
+		return nil, false
+	}
+	return decodedPrincipal, true
+}
+
+func hasExactContainerAppsPrincipalSchema(raw []byte) bool {
 	var principalFields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &principalFields); err != nil ||
 		!hasExactJSONFields(principalFields, "auth_typ", "claims", "name_typ", "role_typ") {
@@ -138,14 +146,14 @@ func hasExactJSONFields(fields map[string]json.RawMessage, names ...string) bool
 
 func hasAzureContainerAppsIdentityHeaders(headers http.Header) bool {
 	for name := range headers {
-		if strings.HasPrefix(strings.ToUpper(name), azurePrincipalHeaderPrefix) {
+		if strings.HasPrefix(strings.ToUpper(name), containerAppsPrincipalHeaderPrefix) {
 			return true
 		}
 	}
 	return false
 }
 
-func validAzureClaimText(value string, maximumBytes int) bool {
+func validContainerAppsClaimText(value string, maximumBytes int) bool {
 	if value == "" || len(value) > maximumBytes || !utf8.ValidString(value) {
 		return false
 	}

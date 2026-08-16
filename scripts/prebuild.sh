@@ -56,10 +56,11 @@ printf '%s\n' "[prebuild 7/14] race detector"
 go test -count=1 -race ./...
 
 printf '%s\n' "[prebuild 8/14] bounded native fuzzing"
-go test -run='^$' -fuzz=FuzzDownloadTarget -fuzztime=100000x ./internal/httpapi
-go test -run='^$' -fuzz=FuzzAuthenticateOIDCHeaders -fuzztime=100000x ./internal/auth
-go test -run='^$' -fuzz=FuzzAuthenticateAzureContainerApps -fuzztime=100000x ./internal/auth
-go test -run='^$' -fuzz=FuzzSelectRange -fuzztime=100000x ./internal/download
+go test -run='^$' -fuzz='^FuzzDownloadTarget$' -fuzztime=100000x ./internal/httpapi
+go test -run='^$' -fuzz='^FuzzAuthenticateOIDCHeaders$' -fuzztime=100000x ./internal/auth
+go test -run='^$' -fuzz='^FuzzAuthenticateAzureContainerApps$' -fuzztime=100000x ./internal/auth
+go test -run='^$' -fuzz='^FuzzAuthenticateAzureContainerAppsOIDC$' -fuzztime=100000x ./internal/auth
+go test -run='^$' -fuzz='^FuzzSelectRange$' -fuzztime=100000x ./internal/download
 
 printf '%s\n' "[prebuild 9/14] Go vulnerability database"
 govulncheck ./... | tee "$evidence_dir/govulncheck.txt"
@@ -81,7 +82,9 @@ printf '%s\n' "[prebuild 11/14] repository policy analysis"
   --config security/semgrep.yaml \
   --error \
   --metrics=off \
+  --no-git-ignore \
   --exclude .agents \
+  --exclude .git \
   --exclude .specify \
   --exclude .security \
   --exclude specs \

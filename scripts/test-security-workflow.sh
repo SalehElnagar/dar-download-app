@@ -87,11 +87,32 @@ if ! grep -Fq "chmod 0711 \"\$evidence_dir\"" scripts/dast.sh ||
   printf '%s\n' "DAST report files are not narrowly writable during the container scan and restrictive afterward." >&2
   exit 1
 fi
-if [[ $(grep -c -- '-fuzztime=100000x' scripts/prebuild.sh) != "4" ]] ||
+if [[ $(grep -c -- '-fuzztime=100000x' scripts/prebuild.sh) != "5" ]] ||
   grep -Eq -- '-fuzztime=[0-9]+s' scripts/prebuild.sh ||
-  ! grep -Fq -- '-fuzz=FuzzDownloadTarget' scripts/prebuild.sh ||
   grep -Fq -- '-fuzz=FuzzParseEnvironmentPolicy' scripts/prebuild.sh; then
   printf '%s\n' "pre-build fuzzing is not bound to the deterministic iteration budget." >&2
+  exit 1
+fi
+for fuzz_target in \
+  FuzzDownloadTarget \
+  FuzzAuthenticateOIDCHeaders \
+  FuzzAuthenticateAzureContainerApps \
+  FuzzAuthenticateAzureContainerAppsOIDC \
+  FuzzSelectRange; do
+  if ! grep -Fq -- "-fuzz='^${fuzz_target}\$'" scripts/prebuild.sh; then
+    printf 'pre-build fuzz target is not exact: %s\n' "$fuzz_target" >&2
+    exit 1
+  fi
+done
+
+semgrep_block=$(awk '
+  /scripts\/run-semgrep\.sh" scan/ { capture = 1 }
+  capture { print }
+  capture && /^[[:space:]]*\.[[:space:]]*$/ { exit }
+' scripts/prebuild.sh)
+if ! grep -Fq -- '--no-git-ignore' <<<"$semgrep_block" ||
+  ! grep -Fq -- '--exclude .git' <<<"$semgrep_block"; then
+  printf '%s\n' "Semgrep does not safely include untracked candidate files before publication." >&2
   exit 1
 fi
 

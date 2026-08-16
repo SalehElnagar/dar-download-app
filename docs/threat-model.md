@@ -3,17 +3,26 @@
 ## Scope and assets
 
 The protected assets are Blob contents, trusted OIDC identity evidence, the Blob reader
-identity, image integrity, and security evidence. The live OIDC provider, authentication layer,
-Azure control plane, fixed storage container, and deployment are external dependencies owned by
-the platform repository.
+identity, image integrity, and security evidence. A custom provider client secret is also an
+asset, but it exists only in Azure Container Apps Authentication and the identity provider; it is
+prohibited from the Go runtime. The live OIDC provider, authentication layer, Azure control
+plane, fixed storage container, and deployment are external dependencies owned by the platform
+repository.
 
 ## Trust boundaries
 
 1. An untrusted external client reaches the approved HTTPS authentication endpoint.
 2. The trusted OIDC layer completes or validates the browser-session or bearer flow.
-3. One configured adapter maps trusted evidence into exactly one issuer and subject: either a
-   stripped generic header pair or a tenant-bound Azure Container Apps principal.
-4. The Go service exact-matches the configured issuer and validates one authenticated identity.
+3. One configured adapter maps trusted evidence into exactly one issuer and subject: a stripped
+   generic header pair, a tenant-bound Entra Container Apps principal, or a protected Container
+   Apps principal from one exact custom OpenID Connect provider.
+4. The Go service validates the configured issuer URL and one authenticated identity. Generic
+   mode exact-matches request issuer evidence, and Entra mode binds the issuer to its configured
+   tenant. Custom Container Apps OIDC mode instead treats the issuer as a deployment-owned trust
+   label: the Go service exact-matches provider evidence and validates the platform principal but
+   does not receive or revalidate an issuer claim or token. Container Apps Authentication
+   provider metadata and authoritative live readback must bind that provider to the configured
+   issuer and audience.
 5. The service validates two raw ASCII path segments and constructs exactly
    `{version}/{file_name}` inside the configured container.
 6. The service obtains a storage token for one dedicated user-assigned identity.
@@ -31,11 +40,13 @@ access every safe two-segment Blob name within it.
 | --- | --- | --- |
 | Forward a download link | Authentication still occurs before Blob access | Any authenticated user in the accepted population can follow the link, and a recipient can redistribute bytes after download |
 | Forge internal identity headers | Header stripping, private ingress, exactly-one checks, bounded values | A compromised or bypassed trusted layer can impersonate users |
-| Mix generic and Azure identity modes | Explicit startup mode and cross-mode header rejection | A wrong mode causes denial until configuration is corrected |
+| Mix trusted identity modes | Explicit startup mode, mode-specific settings, and cross-mode header rejection | A wrong mode causes denial until configuration is corrected |
 | Substitute an Azure tenant or principal | Exact Entra v2 issuer/tenant binding, canonical object ID, duplicate rejection, and equality between claim and platform ID header | A compromised Container Apps auth sidecar remains authoritative inside its boundary |
-| Substitute the issuer or vary a trailing slash | HTTPS issuer validation and byte-exact match to startup policy | A misconfigured upstream can deny valid requests or assert the configured issuer incorrectly |
-| Reuse the same subject under another issuer | Issuer and subject are validated as one trusted pair | Upstream compromise remains authoritative inside its boundary |
-| Smuggle duplicate issuer or subject values | Both header value lists must contain exactly one entry | A non-conforming intermediary that rewrites field semantics can cause denial |
+| Substitute a custom provider, principal, or metadata | Exact bounded provider name in config, IDP header, and decoded `auth_typ`; strict canonical Base64 JSON; opaque bounded platform principal ID; authoritative Container Apps Authentication metadata issuer/audience readback | The Go app receives neither an issuer claim nor a token and therefore trusts the platform configuration and auth sidecar inside this boundary |
+| Expose or reuse the custom provider client secret | Secret remains in Container Apps auth configuration; no Go setting, image, header, or log accepts it | A compromised platform owner or auth sidecar can use or replace the confidential client credential |
+| Substitute the issuer or vary a trailing slash | Bounded HTTPS issuer validation; generic request evidence and Entra tenant policy bind exactly to startup configuration; custom-provider metadata binding is verified at deployment readback | A misconfigured or compromised trusted layer remains authoritative inside its boundary |
+| Reuse the same subject under another provider | Generic and Entra modes bind the issuer in request evidence or tenant policy; custom mode exact-matches provider evidence and relies on deployment metadata binding | Upstream compromise remains authoritative inside its boundary |
+| Smuggle duplicate identity values | Each adapter requires exactly one of every mandatory identity header and rejects cross-mode evidence | A non-conforming intermediary that rewrites field semantics can cause denial |
 | Traverse or alias a Blob path | Exact route shape, ASCII allowlist, length bounds, dot-only rejection, and rejection of encoding, slash, backslash, query, controls, Unicode, and nested paths | An authenticated caller can access and probe every safe exact name in the fixed container by design |
 | Enumerate storage | No list operation; authentication precedes exact Stat/read | Authenticated callers can still guess valid names and distinguish missing objects through bounded 404 responses |
 | Treat a filename as authorization | Documentation and deployment contract make the fixed container the audience boundary | Incorrectly placing differently authorized data in the same container exposes it to every authenticated caller |
@@ -50,7 +61,7 @@ access every safe two-segment Blob name within it.
 
 - Authentication is necessary and, for a safe exact path in the fixed container, sufficient for
   application access.
-- Exactly one trusted-identity adapter is active, and both adapters produce the same internal
+- Exactly one trusted-identity adapter is active, and all three adapters produce the same internal
   issuer-and-subject authentication input.
 - Invalid routes and identity evidence are denied before any storage operation.
 - Caller input never selects an account, container, nested path, credential, or response

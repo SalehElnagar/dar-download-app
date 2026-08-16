@@ -9,8 +9,9 @@ recorded source digest and image ID.
 | Requirement | Primary implementation and evidence |
 | --- | --- |
 | Only anonymous health and protected two-segment download routes exist | Canonical OpenAPI contract plus repository and handler route/status tests |
-| Trusted OIDC identity requires one explicit adapter, one exact configured issuer, and one bounded subject | Generic and Azure adapter configuration, identity, fuzz, and handler tests covering malformed, duplicate, cross-mode, tenant, object-ID, issuer, and trailing-slash cases |
-| Every valid authenticated identity may download without an application allowlist | Arbitrary-subject tests in both trusted modes and configuration tests proving no release policy is required |
+| Trusted OIDC identity requires one explicit adapter, one exact configured issuer, and one bounded subject | Generic, Entra ACA, and `azure_container_apps_oidc` configuration, identity, fuzz, and handler tests covering malformed, duplicate, cross-mode, tenant, provider, principal-ID, issuer, and trailing-slash cases |
+| Every valid authenticated identity may download without an application allowlist | Arbitrary-subject tests in all trusted modes and configuration tests proving no release policy is required |
+| The custom ACA OIDC confidential client stays outside Go | Repository controls prohibit client ID/secret inputs; configuration tests require only issuer and bounded provider name; live auth-resource readback remains external evidence |
 | The obsolete static authorization setting cannot be silently retained | Startup configuration tests reject `DAR_DOWNLOAD_RELEASES_JSON` whenever supplied |
 | Caller input maps only to one safe exact Blob in the fixed container | Two-segment grammar tests, fuzzing, exact ZIP/DAR mapping tests, no-list Blob interface, and Blob adapter tests |
 | Authentication precedes Blob existence checks | Handler denial matrix asserts zero storage calls for absent or invalid identity evidence |
@@ -44,5 +45,8 @@ successful run in the private GitHub repository, signature and attestation verif
 registry digest, and an authorized staging test covering the chosen external OIDC flow, token or
 session validation, caller-header stripping, private ingress, private Blob access, full/resumed
 checksum, and penetration testing. Live deployment readback must also prove that no platform
-per-user restriction contradicts the all-authenticated-users contract. None of those live results
-may be inferred from local evidence.
+per-user restriction contradicts the all-authenticated-users contract. For a custom provider,
+readback and a real login must additionally prove the exact provider name, metadata issuer,
+audience, callback, confidential Authorization Code flow, Container Apps secret reference, and
+absence of credentials from the Go container. None of those live results may be inferred from
+local evidence.
