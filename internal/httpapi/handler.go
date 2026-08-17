@@ -3,12 +3,15 @@ package httpapi
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/SalehElnagar/dar-download-app/internal/auth"
 	"github.com/SalehElnagar/dar-download-app/internal/blob"
@@ -54,7 +57,7 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		writeJSON(writer, http.StatusNotFound, "release_not_found")
 		return
 	}
-	_, authenticated := auth.Authenticate(
+	identity, authenticated := auth.Authenticate(
 		request.Header,
 		auth.BoundaryPolicy{
 			ExpectedIssuer:           handler.config.OIDCIssuer,
@@ -65,6 +68,11 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 	)
 	if !authenticated {
 		writeJSON(writer, http.StatusUnauthorized, "authentication_required")
+		return
+	}
+	sessionID, err := newSessionID()
+	if err != nil {
+		writeJSON(writer, http.StatusInternalServerError, "audit_unavailable")
 		return
 	}
 	snapshot, err := handler.store.Stat(request.Context(), target.blobName)
@@ -88,16 +96,41 @@ func (handler *Handler) ServeHTTP(writer http.ResponseWriter, request *http.Requ
 		writeJSON(writer, http.StatusRequestedRangeNotSatisfiable, "invalid_range")
 		return
 	}
-	handler.stream(writer, request, selectedDownload{
+	selected := selectedDownload{
 		target:    target,
 		snapshot:  snapshot,
 		selection: selection,
-	})
+	}
+	handler.logger.Info(
+		"download started",
+		"schema_version", "1.0",
+		"event", "dar.download.started",
+		"occurred_at", time.Now().UTC().Format(time.RFC3339Nano),
+		"session_id", sessionID,
+		"subject", identity.Subject,
+		"version", target.version,
+		"file_name", target.fileName,
+		"requested_bytes", selection.Length,
+	)
+	streamed := handler.stream(writer, request, selected)
+	handler.logger.Info(
+		"download terminal",
+		"schema_version", "1.0",
+		"event", "dar.download."+strings.ToLower(streamed.outcome),
+		"occurred_at", time.Now().UTC().Format(time.RFC3339Nano),
+		"session_id", sessionID,
+		"subject", identity.Subject,
+		"version", target.version,
+		"file_name", target.fileName,
+		"streamed_bytes", streamed.bytes,
+		"outcome", streamed.outcome,
+	)
 }
 
 type downloadTarget struct {
 	blobName string
 	fileName string
+	version  string
 }
 
 type selectedDownload struct {
@@ -106,16 +139,21 @@ type selectedDownload struct {
 	selection download.Selection
 }
 
+type streamResult struct {
+	outcome string
+	bytes   int64
+}
+
 func (handler *Handler) stream(
 	writer http.ResponseWriter,
 	request *http.Request,
 	selected selectedDownload,
-) {
+) streamResult {
 	selection := selected.selection
 	if selection.Length == 0 {
 		setDownloadHeaders(writer.Header(), selected)
 		writer.WriteHeader(http.StatusOK)
-		return
+		return streamResult{outcome: "STREAM_COMPLETED"}
 	}
 
 	firstLength := min(selection.Length, config.MaxStorageSegment)
@@ -128,7 +166,7 @@ func (handler *Handler) stream(
 	)
 	if err != nil {
 		handler.writeStorageError(writer, request.Context(), err)
-		return
+		return streamResult{outcome: "STORAGE_UNAVAILABLE"}
 	}
 
 	setDownloadHeaders(writer.Header(), selected)
@@ -137,15 +175,17 @@ func (handler *Handler) stream(
 		status = http.StatusPartialContent
 	}
 	writer.WriteHeader(status)
-	if !handler.copySegment(writer, reader, firstLength) {
-		return
+	written, copied := handler.copySegment(writer, reader, firstLength)
+	totalWritten := written
+	if !copied {
+		return streamResult{outcome: streamFailureOutcome(request.Context()), bytes: totalWritten}
 	}
 
 	offset := selection.Offset + firstLength
 	remaining := selection.Length - firstLength
 	for remaining > 0 {
 		if request.Context().Err() != nil {
-			return
+			return streamResult{outcome: "STREAM_ABANDONED", bytes: totalWritten}
 		}
 		length := min(remaining, config.MaxStorageSegment)
 		reader, openErr := handler.store.OpenRange(
@@ -153,28 +193,31 @@ func (handler *Handler) stream(
 		)
 		if openErr != nil {
 			handler.logStreamFailure()
-			return
+			return streamResult{outcome: "STREAM_FAILED", bytes: totalWritten}
 		}
-		if !handler.copySegment(writer, reader, length) {
-			return
+		written, copied = handler.copySegment(writer, reader, length)
+		totalWritten += written
+		if !copied {
+			return streamResult{outcome: streamFailureOutcome(request.Context()), bytes: totalWritten}
 		}
 		offset += length
 		remaining -= length
 	}
+	return streamResult{outcome: "STREAM_COMPLETED", bytes: totalWritten}
 }
 
 func (handler *Handler) copySegment(
 	writer http.ResponseWriter,
 	reader io.ReadCloser,
 	length int64,
-) bool {
-	_, copyErr := io.CopyN(writer, reader, length)
+) (int64, bool) {
+	written, copyErr := io.CopyN(writer, reader, length)
 	closeErr := reader.Close()
 	if copyErr != nil || closeErr != nil {
 		handler.logStreamFailure()
-		return false
+		return written, false
 	}
-	return true
+	return written, true
 }
 
 func (handler *Handler) writeStorageError(
@@ -212,7 +255,23 @@ func downloadTargetFromRequest(request *http.Request) (downloadTarget, bool) {
 	return downloadTarget{
 		blobName: parts[3] + "/" + parts[5],
 		fileName: parts[5],
+		version:  parts[3],
 	}, true
+}
+
+func newSessionID() (string, error) {
+	random := make([]byte, 16)
+	if _, err := rand.Read(random); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(random), nil
+}
+
+func streamFailureOutcome(ctx context.Context) string {
+	if ctx.Err() != nil {
+		return "STREAM_ABANDONED"
+	}
+	return "STREAM_FAILED"
 }
 
 func validDownloadSegment(value string, maximumBytes int) bool {
@@ -268,6 +327,7 @@ func writeHealth(writer http.ResponseWriter) {
 	writer.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(http.StatusOK)
+	// nosemgrep: go.lang.security.audit.xss.no-io-writestring-to-responsewriter.no-io-writestring-to-responsewriter -- compile-time JSON with an application/json content type
 	_, _ = io.WriteString(writer, body)
 }
 
@@ -277,5 +337,6 @@ func writeJSON(writer http.ResponseWriter, status int, code string) {
 	writer.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(status)
+	// nosemgrep: go.lang.security.audit.xss.no-io-writestring-to-responsewriter.no-io-writestring-to-responsewriter -- code is an internal bounded reason token, not HTML or user input
 	_, _ = io.WriteString(writer, body)
 }

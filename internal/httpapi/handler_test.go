@@ -148,6 +148,48 @@ func TestFullDownloadStreamsExactSegmentsAndHeaders(t *testing.T) {
 	}
 }
 
+func TestSuccessfulDownloadEmitsCorrelatedStartedAndTerminalAuditEvents(t *testing.T) {
+	t.Parallel()
+	storage := &testsupport.Storage{Objects: map[string]testsupport.Object{
+		blobName: {Data: []byte("0123456789"), ETag: `"etag-v1"`},
+	}}
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	recorder := request(
+		t,
+		httpapi.New(testConfig(t), storage, logger),
+		http.MethodGet,
+		downloadPath,
+		authenticatedHeaders(),
+	)
+
+	if recorder.Code != http.StatusOK || recorder.Body.String() != "0123456789" {
+		t.Fatalf("response = %d %q", recorder.Code, recorder.Body.String())
+	}
+	lines := strings.Split(strings.TrimSpace(logs.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("audit lines = %d: %q", len(lines), logs.String())
+	}
+	var started, terminal map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &started); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(lines[1]), &terminal); err != nil {
+		t.Fatal(err)
+	}
+	if started["event"] != "dar.download.started" || terminal["event"] != "dar.download.stream_completed" ||
+		started["session_id"] != terminal["session_id"] || started["subject"] != allowedSubject ||
+		started["version"] != version || started["file_name"] != fileName ||
+		terminal["streamed_bytes"] != float64(10) || terminal["outcome"] != "STREAM_COMPLETED" {
+		t.Fatalf("audit = %#v %#v", started, terminal)
+	}
+	for _, forbidden := range []string{oidcIssuer, `"etag-v1"`, "Authorization", "Bearer"} {
+		if strings.Contains(logs.String(), forbidden) {
+			t.Fatalf("audit contains forbidden value %q", forbidden)
+		}
+	}
+}
+
 func TestPartialDownloadReturnsExactSelectedBytes(t *testing.T) {
 	t.Parallel()
 
@@ -398,7 +440,7 @@ func TestMidstreamVersionFailureTerminatesWithoutSensitiveLogging(t *testing.T) 
 	if !strings.Contains(logs.String(), "stream_failure") {
 		t.Fatalf("log = %q", logs.String())
 	}
-	for _, forbidden := range []string{version, fileName, blobName, oidcIssuer, allowedSubject, `"etag-v1"`} {
+	for _, forbidden := range []string{oidcIssuer, `"etag-v1"`} {
 		if strings.Contains(logs.String(), forbidden) {
 			t.Fatalf("log contains forbidden value %q", forbidden)
 		}
