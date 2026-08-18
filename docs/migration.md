@@ -4,7 +4,7 @@
 
 `SalehElnagar/dar-download-app` becomes the only writable product repository. It contains the Go
 download app, Go worker, Go release publisher, Azure DevOps YAML, release input contract, and
-operations documentation.
+operations documentation plus the editable architecture diagrams and generated views.
 
 The former `SalehElnagar/dar-download` repository remains a read-only rollback source until the
 new repository completes staging and one approved non-production release.
@@ -30,7 +30,7 @@ new repository completes staging and one approved non-production release.
    revision available for rollback until the new revision is healthy.
 7. Run the new release pipeline against non-production Storage, Service Bus, worker, SendGrid
    sandbox/test address, and download app.
-8. Verify immutable Blob versions, PII-free queue body, terminal receipt, Entra-authenticated
+8. Verify immutable Blob versions, PII-free queue body, terminal receipt, OIDC-authenticated
    byte-correct download, and audit logs.
 9. Only then repoint the production Azure DevOps pipeline and product-team instructions to the
    new repository.

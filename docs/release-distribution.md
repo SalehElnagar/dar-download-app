@@ -75,9 +75,10 @@ safe because the worker's receipt CAS is the business-effect idempotency boundar
 - Receipt `FAILED` is a known permanent result.
 - Receipt `UNKNOWN` is an ambiguous provider outcome and must not be blindly resent.
 - `dar.download.stream_completed` is the authoritative application event for a successful
-  authenticated stream. Resolve its opaque subject through the protected Entra directory view.
-- Entra authentication failures happen before the app and require Entra sign-in logs; they are
-  not automatically attributable to a release version.
+  authenticated stream. Resolve its opaque subject through the protected identity-directory
+  view described in the authentication operations runbook.
+- Identity-provider authentication failures happen before the app and require provider sign-in
+  logs; they are not automatically attributable to a release version.
 
 Configure the SendGrid Event Webhook before claiming automated delivered, bounced, or dropped
 mailbox status.

@@ -30,7 +30,7 @@ func TestReleasePipelineUsesSecureRecipientInputAndProtectedAzurePublication(t *
 		"DAR_AZURE_WORKLOAD_IDENTITY_SERVICE_CONNECTION",
 		"environment: dar-release-distribution-production",
 		"name: $(DAR_PRIVATE_AGENT_POOL)",
-		"harmony.private-network -equals true",
+		"dar.private-network -equals true",
 	} {
 		if !strings.Contains(text, required) {
 			t.Errorf("pipeline missing %q", required)

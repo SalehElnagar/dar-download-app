@@ -94,7 +94,7 @@ stages:
     pool:
       name: $(DAR_PRIVATE_AGENT_POOL)
       demands:
-        - harmony.private-network -equals true
+        - dar.private-network -equals true
     jobs:
       - deployment: PublishRelease
         displayName: Publish approved release

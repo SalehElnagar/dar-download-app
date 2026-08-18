@@ -30,7 +30,9 @@ File to the agent and deletes the job-local copy when the job completes; the pip
 its digest across validation and publication.
 
 The publication stage must use a private agent with private DNS/network reachability to Storage
-and Service Bus. Do not make private data-plane endpoints public to accommodate a hosted agent.
+and Service Bus. Register the user-defined agent capability `dar.private-network=true`; the
+release pipeline demands that exact capability. Do not make private data-plane endpoints public
+to accommodate a hosted agent.
 
 ## Production promotion
 

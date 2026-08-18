@@ -1,0 +1,417 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="Electron" modified="2026-08-18T12:00:00.000Z" agent="Codex drawio-skill" version="30.2.6">
+  <diagram id="dar-release-architecture" name="End-to-End Architecture">
+    <mxGraphModel dx="2200" dy="1440" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2200" pageHeight="1440" math="0" shadow="0" adaptiveColors="auto">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="&lt;b&gt;DAR Release Distribution Architecture&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=24;fontColor=#1f2937;" vertex="1" parent="1">
+          <mxGeometry x="30" y="20" width="2140" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="Private GitHub versioned ZIP + Azure DevOps Secure File cohort &#8594; derived manifest &#8594; private immutable snapshots &#8594; Service Bus &#8594; Go worker on Container Apps &#8594; Entra-authenticated download" style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontColor=#4b5563;" vertex="1" parent="1">
+          <mxGeometry x="30" y="60" width="2140" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="source_boundary" value="Source Control &amp; CI/CD (SaaS)" style="swimlane;startSize=36;html=1;rounded=1;collapsible=0;horizontal=1;container=1;pointerEvents=0;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="30" y="100" width="380" height="1180" as="geometry"/>
+        </mxCell>
+        <mxCell id="github_repo" value="&lt;b&gt;Private GitHub Product Repository&lt;/b&gt;&lt;br&gt;Go source + Azure DevOps YAML&lt;br&gt;releases/vA.B.C.DD/dar-A.B.C.DD.zip&lt;br&gt;&lt;font color=&quot;#6b7280&quot;&gt;No product manifest &#8226; no recipient PII &#8226; no GitHub Actions&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;strokeWidth=2;dashed=1;align=center;verticalAlign=middle;fontSize=11;" vertex="1" parent="source_boundary">
+          <mxGeometry x="50" y="70" width="280" height="125" as="geometry"/>
+        </mxCell>
+        <mxCell id="recipient_secure_file" value="&lt;b&gt;Azure DevOps Secure File&lt;/b&gt;&lt;br&gt;first_name &#8226; last_name &#8226; email&lt;br&gt;protected recipient cohort&lt;br&gt;&lt;font color=&quot;#6b7280&quot;&gt;Not stored in Git&lt;/font&gt;" style="shape=document;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;align=center;verticalAlign=middle;fontSize=10;" vertex="1" parent="source_boundary">
+          <mxGeometry x="50" y="220" width="280" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="azure_pipeline" value="&lt;b&gt;Azure DevOps Pipeline&lt;/b&gt;&lt;br&gt;GitHub trigger: releases/** &#8226; LFS checkout&lt;br&gt;download protected Secure File&lt;br&gt;validate version folder + ZIP contents&lt;br&gt;derive manifest + deterministic JSONL batches&lt;br&gt;approval gate &#8226; publish snapshots" style="shape=label;image=img/lib/mscae/Azure_Pipelines.svg;imageWidth=48;imageHeight=48;imageAlign=left;imageVerticalAlign=middle;spacingLeft=64;rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;align=left;verticalAlign=middle;fontSize=10;" vertex="1" parent="source_boundary">
+          <mxGeometry x="50" y="350" width="280" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="source_note" value="&lt;b&gt;PII / authority boundary&lt;/b&gt;&lt;br&gt;&#8226; Git contains source and approved release ZIPs only&lt;br&gt;&#8226; Secure File contains the protected recipient cohort&lt;br&gt;&#8226; Access is limited to release operators&lt;br&gt;&#8226; Azure DevOps validates, batches and publishes snapshots&lt;br&gt;&#8226; Pipeline cannot call SendGrid&lt;br&gt;&#8226; The email list never grants download access" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=left;verticalAlign=top;spacing=12;fontSize=10;" vertex="1" parent="source_boundary">
+          <mxGeometry x="45" y="540" width="290" height="230" as="geometry"/>
+        </mxCell>
+        <mxCell id="azure_boundary" value="Azure Subscription / Managed Runtime Boundary" style="swimlane;startSize=36;html=1;rounded=1;collapsible=0;horizontal=1;container=1;pointerEvents=0;fillColor=#f8fbff;strokeColor=#0078d4;strokeWidth=2;fontColor=#005a9e;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="430" y="100" width="1310" height="1180" as="geometry"/>
+        </mxCell>
+        <mxCell id="ingest_group" value="Release Ingestion &amp; Durable Handoff" style="swimlane;startSize=30;html=1;rounded=1;collapsible=0;horizontal=1;container=1;pointerEvents=0;fillColor=#eef6ff;strokeColor=#6c8ebf;fontColor=#35577a;fontStyle=1;fontSize=13;" vertex="1" parent="azure_boundary">
+          <mxGeometry x="20" y="55" width="1270" height="240" as="geometry"/>
+        </mxCell>
+        <mxCell id="private_agent" value="&lt;b&gt;Publisher Runner&lt;/b&gt;&lt;br&gt;Private Azure DevOps agent&lt;br&gt;private DNS + data-plane reachability&lt;br&gt;&lt;font color=&quot;#6b7280&quot;&gt;Auth: workload identity federation&lt;/font&gt;" style="shape=label;image=img/lib/azure2/compute/Automanaged_VM.svg;imageWidth=48;imageHeight=44;imageAlign=left;imageVerticalAlign=middle;spacingLeft=62;rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;align=left;verticalAlign=middle;fontSize=10;" vertex="1" parent="ingest_group">
+          <mxGeometry x="30" y="55" width="280" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="blob_storage" value="&lt;b&gt;Blob Storage &#8212; Private Containers&lt;/b&gt;&lt;br&gt;Versioned release ZIP + generated manifests&lt;br&gt;Protected recipient batch snapshots&lt;br&gt;HMAC notification receipts&lt;br&gt;Optional immutable audit archive target&lt;br&gt;&lt;font color=&quot;#6b7280&quot;&gt;Anonymous access disabled &#8226; managed identity/RBAC&lt;/font&gt;" style="shape=label;image=img/lib/azure2/storage/Storage_Accounts.svg;imageWidth=46;imageHeight=46;imageAlign=left;imageVerticalAlign=middle;spacingLeft=60;rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;align=left;verticalAlign=middle;fontSize=9;" vertex="1" parent="ingest_group">
+          <mxGeometry x="410" y="55" width="280" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="ingest_note" value="Pipeline derives the internal manifest, converts the protected Secure File into deterministic JSONL batches, then conditionally uploads the release artifact, manifest and batch snapshots. Record SHA-256, ETag and Blob version IDs; queue messages contain references only&#8212;never names or email addresses." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;dashed=1;align=left;verticalAlign=middle;spacing=10;fontSize=9;" vertex="1" parent="ingest_group">
+          <mxGeometry x="30" y="178" width="760" height="42" as="geometry"/>
+        </mxCell>
+        <mxCell id="release_group" value="Release Distribution Control Plane" style="swimlane;startSize=30;html=1;rounded=1;collapsible=0;horizontal=1;container=1;pointerEvents=0;fillColor=#fffaf0;strokeColor=#d6b656;fontColor=#8a6500;fontStyle=1;fontSize=13;" vertex="1" parent="azure_boundary">
+          <mxGeometry x="20" y="315" width="1270" height="390" as="geometry"/>
+        </mxCell>
+        <mxCell id="service_bus" value="" style="shape=mxgraph.azure.service_bus_queues;pointerEvents=1;html=1;strokeColor=none;fillColor=#00BEF2;" vertex="1" parent="ingest_group">
+          <mxGeometry x="810" y="66" width="70" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="service_bus_label" value="&lt;b&gt;Azure Service Bus&lt;/b&gt;&lt;br&gt;Queue: dar-release-notifications&lt;br&gt;One message per recipient batch reference&lt;br&gt;&lt;font color=&quot;#6b7280&quot;&gt;Peek-Lock &#8226; duplicate detection &#8226; DLQ &#8226; no PII&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;align=left;verticalAlign=middle;spacing=10;fontSize=10;" vertex="1" parent="ingest_group">
+          <mxGeometry x="900" y="55" width="300" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="container_apps_group" value="Azure Container Apps Environment" style="swimlane;startSize=26;html=1;rounded=1;collapsible=0;horizontal=1;container=1;pointerEvents=0;fillColor=#eef6ff;strokeColor=#6c8ebf;fontColor=#35577a;fontStyle=1;fontSize=11;" vertex="1" parent="release_group">
+          <mxGeometry x="850" y="25" width="350" height="160" as="geometry"/>
+        </mxCell>
+        <mxCell id="distribution_worker" value="&lt;b&gt;Go Distribution Worker&lt;/b&gt;&lt;br&gt;Azure Container App &#8226; no public ingress&lt;br&gt;always-on minimum replicas set by SLO&lt;br&gt;Peek-Lock + bounded lock renewal&lt;br&gt;HMAC recipient ID &#8226; Blob CAS receipt&lt;br&gt;one recipient effect at a time" style="shape=label;image=img/lib/azure2/other/Worker_Container_App.svg;imageWidth=48;imageHeight=44;imageAlign=left;imageVerticalAlign=middle;spacingLeft=62;rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;align=left;verticalAlign=middle;fontSize=9;" vertex="1" parent="container_apps_group">
+          <mxGeometry x="10" y="32" width="330" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="bus_value" value="&lt;b&gt;Service Bus value&lt;/b&gt;&lt;br&gt;Durable handoff &#8226; buffering &#8226; Peek-Lock redelivery &#8226; bounded retries &#8226; dead-letter queue &#8226; workload isolation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=middle;spacing=10;fontSize=11;" vertex="1" parent="release_group">
+          <mxGeometry x="30" y="55" width="260" height="115" as="geometry"/>
+        </mxCell>
+        <mxCell id="poc_proof_note" value="&lt;b&gt;End-to-end proof &#8212; 18 Aug 2026&lt;/b&gt;&lt;br&gt;&#8226; Azure DevOps run 359 published v8.31.1.04&lt;br&gt;&#8226; SendGrid 202 + Outlook mailbox receipt&lt;br&gt;&#8226; Direct app URL; click/open tracking disabled&lt;br&gt;&#8226; Entra-authenticated 208-byte stream completed&lt;br&gt;&#8226; Receipt + download audit correlated" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef6ff;strokeColor=#6c8ebf;align=left;verticalAlign=top;spacing=10;fontSize=9;" vertex="1" parent="release_group">
+          <mxGeometry x="30" y="190" width="260" height="155" as="geometry"/>
+        </mxCell>
+        <mxCell id="key_vault" value="&lt;b&gt;Azure Key Vault&lt;/b&gt;&lt;br&gt;Receipt-HMAC key + version (tested)&lt;br&gt;SendGrid Mail-Send key (tested secret reference)" style="shape=label;image=img/lib/azure2/security/Key_Vaults.svg;imageWidth=42;imageHeight=42;imageAlign=left;imageVerticalAlign=middle;spacingLeft=56;rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;align=left;verticalAlign=middle;fontSize=9;" vertex="1" parent="release_group">
+          <mxGeometry x="890" y="210" width="250" height="75" as="geometry"/>
+        </mxCell>
+        <mxCell id="data_group" value="Database-Free Durable State (private containers in one storage account)" style="swimlane;startSize=30;html=1;rounded=1;collapsible=0;horizontal=1;container=1;pointerEvents=0;fillColor=#f3fbf2;strokeColor=#82b366;fontColor=#376b36;fontStyle=1;fontSize=11;" vertex="1" parent="release_group">
+          <mxGeometry x="310" y="170" width="540" height="195" as="geometry"/>
+        </mxCell>
+        <mxCell id="release_manifests" value="&lt;b&gt;dar-releases/&lt;/b&gt;&lt;br&gt;{version}/{filename}&lt;br&gt;conditional create&lt;br&gt;strong ETag" style="shape=document;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;align=center;verticalAlign=middle;fontSize=9;" vertex="1" parent="data_group">
+          <mxGeometry x="15" y="42" width="155" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="recipient_batches" value="&lt;b&gt;recipient-batches/&lt;/b&gt;&lt;br&gt;canonical JSONL batches&lt;br&gt;private &#8226; versioned&lt;br&gt;bounded retention" style="shape=document;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;align=center;verticalAlign=middle;fontSize=9;" vertex="1" parent="data_group">
+          <mxGeometry x="195" y="42" width="150" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="notification_receipts" value="&lt;b&gt;notification-receipts/&lt;/b&gt;&lt;br&gt;release / operation / key version / HMAC ID&lt;br&gt;conditional state transitions&lt;br&gt;&lt;font color=&quot;#6b7280&quot;&gt;SIMULATED / ACCEPTED / UNKNOWN / FAILED&lt;/font&gt;" style="shape=document;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;align=center;verticalAlign=middle;fontSize=8;" vertex="1" parent="data_group">
+          <mxGeometry x="370" y="42" width="155" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="data_note" value="No application database &#8226; container-scoped identities &#8226; app cannot read recipient batches &#8226; receipts contain no raw name or email" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eaf4e8;strokeColor=#82b366;strokeWidth=2;align=center;verticalAlign=middle;fontSize=8;" vertex="1" parent="data_group">
+          <mxGeometry x="15" y="158" width="510" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="download_group" value="Authenticated Download Data Plane" style="swimlane;startSize=30;html=1;rounded=1;collapsible=0;horizontal=1;container=1;pointerEvents=0;fillColor=#f7f3fb;strokeColor=#9673a6;fontColor=#674778;fontStyle=1;fontSize=13;" vertex="1" parent="azure_boundary">
+          <mxGeometry x="20" y="725" width="1270" height="310" as="geometry"/>
+        </mxCell>
+        <mxCell id="download_app" value="&lt;b&gt;Go DAR Download App&lt;/b&gt;&lt;br&gt;Azure Container App&lt;br&gt;trust only validated platform principal&lt;br&gt;strict {version}/{filename} Blob path&lt;br&gt;strong ETag + If-Match range streaming&lt;br&gt;structured started + terminal audit events&lt;br&gt;&lt;font color=&quot;#6b7280&quot;&gt;No database &#8226; no recipient-list access&lt;/font&gt;" style="shape=label;image=img/lib/azure2/other/Worker_Container_App.svg;imageWidth=48;imageHeight=46;imageAlign=left;imageVerticalAlign=middle;spacingLeft=62;rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;align=left;verticalAlign=middle;fontSize=8;" vertex="1" parent="download_group">
+          <mxGeometry x="500" y="55" width="330" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="easy_auth" value="&lt;b&gt;Azure Container Apps Authentication&lt;/b&gt;&lt;br&gt;Microsoft Entra provider&lt;br&gt;redirect unauthenticated browsers&lt;br&gt;validate issuer / audience / expiry&lt;br&gt;inject validated principal headers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;align=center;verticalAlign=middle;fontSize=9;" vertex="1" parent="download_group">
+          <mxGeometry x="870" y="55" width="300" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="auth_note" value="&lt;b&gt;Database-free authorization + download&lt;/b&gt;&lt;br&gt;1. Open the stable release URL&lt;br&gt;2. Container Apps authentication redirects to Microsoft Entra ID&lt;br&gt;3. Platform validates the returned identity token&lt;br&gt;4. App receives the validated subject&lt;br&gt;5. App selects {version}/{filename} and pins its ETag&lt;br&gt;6. App streams with If-Match and emits audit events" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=left;verticalAlign=top;spacing=10;fontSize=9;" vertex="1" parent="download_group">
+          <mxGeometry x="30" y="55" width="420" height="155" as="geometry"/>
+        </mxCell>
+        <mxCell id="download_note" value="Email and the recipient cohort never grant access. Microsoft Entra ID and Container Apps authentication own authentication; the Go app has no SQL connection. Session and revocation behavior follows the configured identity policy. A completed audit event means the server streamed all release bytes&#8212;not proof the file was saved or opened." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;dashed=1;align=left;verticalAlign=middle;spacing=10;fontSize=9;" vertex="1" parent="download_group">
+          <mxGeometry x="30" y="215" width="1140" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="ops_group" value="Operations &amp; Audit" style="swimlane;startSize=26;html=1;rounded=1;collapsible=0;horizontal=1;container=1;pointerEvents=0;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#444444;fontStyle=1;fontSize=12;" vertex="1" parent="azure_boundary">
+          <mxGeometry x="20" y="1055" width="1270" height="95" as="geometry"/>
+        </mxCell>
+        <mxCell id="monitor" value="&lt;b&gt;Azure Monitor / Log Analytics + Optional Immutable Export&lt;/b&gt;&lt;br&gt;Worker: HMAC recipient + receipt outcome &#8226; App: Entra subject + release version + filename + session ID + UTC time + bytes + outcome&lt;br&gt;&lt;font color=&quot;#6b7280&quot;&gt;Container Apps diagnostic logs &#8226; never sample audit events &#8226; production target: immutable/WORM export&lt;/font&gt;" style="shape=label;image=img/lib/azure2/analytics/Log_Analytics_Workspaces.svg;imageWidth=40;imageHeight=40;imageAlign=left;imageVerticalAlign=middle;spacingLeft=54;rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;align=left;verticalAlign=middle;fontSize=9;" vertex="1" parent="ops_group">
+          <mxGeometry x="150" y="30" width="970" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="external_boundary" value="Identity, Email Provider &amp; Clients" style="swimlane;startSize=36;html=1;rounded=1;collapsible=0;horizontal=1;container=1;pointerEvents=0;fillColor=#fafafa;strokeColor=#666666;fontColor=#333333;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="1760" y="100" width="410" height="1180" as="geometry"/>
+        </mxCell>
+        <mxCell id="sendgrid" value="&lt;b&gt;Twilio SendGrid &#8212; Live POC Proven&lt;/b&gt;&lt;br&gt;Sandbox 200 &#8226; live Mail Send 202&lt;br&gt;Click/open tracking disabled&lt;br&gt;&lt;font color=&quot;#6b7280&quot;&gt;202 = accepted; mailbox observed separately&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;align=center;verticalAlign=middle;fontSize=10;" vertex="1" parent="external_boundary">
+          <mxGeometry x="65" y="420" width="280" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="client" value="&lt;b&gt;Authorized Client&lt;/b&gt;&lt;br&gt;Mailbox + browser&lt;br&gt;Receives stable application URL&lt;br&gt;&lt;font color=&quot;#6b7280&quot;&gt;Email and URL do not grant access&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="external_boundary">
+          <mxGeometry x="65" y="760" width="280" height="115" as="geometry"/>
+        </mxCell>
+        <mxCell id="entra_id" value="&lt;b&gt;Microsoft Entra ID&lt;/b&gt;&lt;br&gt;OIDC / OAuth authentication&lt;br&gt;issuer &#8226; subject &#8226; audience &#8226; expiry&lt;br&gt;&lt;font color=&quot;#6b7280&quot;&gt;Identity authority; no app-to-SQL path&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;align=center;verticalAlign=middle;fontSize=11;" vertex="1" parent="external_boundary">
+          <mxGeometry x="65" y="910" width="280" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="external_note" value="&lt;b&gt;Client-facing guarantee&lt;/b&gt;&lt;br&gt;Only the authenticated application URL is emailed. Blob remains private; no SAS or storage credential reaches the client." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;verticalAlign=middle;spacing=10;fontSize=11;" vertex="1" parent="external_boundary">
+          <mxGeometry x="55" y="1060" width="300" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" value="1a  releases/** update + LFS checkout" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#0078d4;strokeWidth=2;endArrow=block;endFill=1;labelBackgroundColor=#ffffff;fontSize=9;exitX=1;exitY=0.65;entryX=1;entryY=0.2;" edge="1" parent="1" source="github_repo" target="azure_pipeline">
+          <mxGeometry x="-0.15" y="16" relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="385" y="250"/>
+              <mxPoint x="385" y="480"/>
+            </Array>
+            <mxPoint x="0" y="0" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e1b" value="1b  Protected recipient input" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#b85450;strokeWidth=2;dashed=1;endArrow=block;endFill=1;labelBackgroundColor=#ffffff;fontSize=9;exitX=0.5;exitY=1;entryX=0.2;entryY=0;" edge="1" parent="1" source="recipient_secure_file" target="azure_pipeline">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2" value="2  Approved publication stage" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#0078d4;strokeWidth=2;endArrow=block;endFill=1;labelBackgroundColor=#ffffff;fontSize=10;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="azure_pipeline" target="private_agent">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3" value="3  Upload snapshots" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#0078d4;strokeWidth=2;endArrow=block;endFill=1;labelBackgroundColor=#ffffff;fontSize=9;exitX=1;exitY=0.45;entryX=0;entryY=0.45;" edge="1" parent="1" source="private_agent" target="blob_storage">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4" value="4  Batch references only" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#d79b00;strokeWidth=2;dashed=1;endArrow=block;endFill=1;labelBackgroundColor=#ffffff;fontSize=10;exitX=0.8;exitY=0;entryX=0.5;entryY=0;" edge="1" parent="1" source="private_agent" target="service_bus">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="704" y="195"/>
+              <mxPoint x="1295" y="195"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" value="5  Peek-Lock" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#d79b00;strokeWidth=2;dashed=1;endArrow=block;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=1;exitY=0.75;entryX=1;entryY=0.5;" edge="1" parent="1" source="service_bus_label" target="distribution_worker">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1700" y="289"/>
+              <mxPoint x="1700" y="527"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" value="6  Read recipient batch" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=alternate;strokeColor=#0078d4;strokeWidth=2;startArrow=block;startFill=1;endArrow=block;endFill=1;labelBackgroundColor=#ffffff;fontSize=9;exitX=0;exitY=0.45;entryX=1;entryY=0.35;" edge="1" parent="1" source="distribution_worker" target="recipient_batches">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1305" y="522"/>
+              <mxPoint x="1305" y="610"/>
+              <mxPoint x="1125" y="610"/>
+              <mxPoint x="1125" y="664"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" value="7  Conditional receipt" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=alternate;strokeColor=#0078d4;strokeWidth=2;startArrow=block;startFill=1;endArrow=block;endFill=1;labelBackgroundColor=#ffffff;fontSize=9;exitX=0;exitY=0.8;entryX=1;entryY=0.5;" edge="1" parent="1" source="distribution_worker" target="notification_receipts">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1305" y="560"/>
+              <mxPoint x="1305" y="680"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" value="8  Fetch scoped secrets" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#9673a6;strokeWidth=2;endArrow=block;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=0.7;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="distribution_worker" target="key_vault">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e9b" value="9  SendGrid Mail Send API" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#82b366;strokeWidth=2;endArrow=block;endFill=1;labelBackgroundColor=#ffffff;fontSize=9;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="distribution_worker" target="sendgrid">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1710" y="527"/>
+              <mxPoint x="1710" y="575"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10" value="10  Direct stable app URL" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#82b366;strokeWidth=2;endArrow=block;endFill=1;labelBackgroundColor=#ffffff;fontSize=10;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="sendgrid" target="client">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e11" value="11  Open release URL" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#0078d4;strokeWidth=2;endArrow=block;endFill=1;labelBackgroundColor=#ffffff;fontSize=11;exitX=0;exitY=0.35;entryX=1;entryY=0.35;" edge="1" parent="1" source="client" target="easy_auth">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e12" value="12  Entra OIDC sign-in / response" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=alternate;strokeColor=#9673a6;strokeWidth=2;endArrow=block;endFill=1;startArrow=block;startFill=1;labelBackgroundColor=#ffffff;fontSize=10;exitX=1;exitY=0.8;entryX=0;entryY=0.25;" edge="1" parent="1" source="easy_auth" target="entra_id">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1710" y="976"/>
+              <mxPoint x="1710" y="1042"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13" value="13  Validated principal headers" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#9673a6;strokeWidth=2;endArrow=block;endFill=1;labelBackgroundColor=#ffffff;fontSize=10;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="easy_auth" target="download_app">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e15" value="14  Blob stat + ETag-pinned range reads" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=alternate;strokeColor=#0078d4;strokeWidth=2;startArrow=block;startFill=1;endArrow=block;endFill=1;labelBackgroundColor=#ffffff;fontSize=9;exitX=0.05;exitY=0;entryX=0;entryY=0.5;" edge="1" parent="1" source="download_app" target="release_manifests">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="966" y="815"/>
+              <mxPoint x="750" y="815"/>
+              <mxPoint x="750" y="680"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e16" value="15  Stream release through authenticated response" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#0078d4;strokeWidth=2;endArrow=block;endFill=1;labelBackgroundColor=#ffffff;fontSize=10;exitX=0.8;exitY=0;entryX=0;entryY=0.8;" edge="1" parent="1" source="download_app" target="client">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1214" y="860"/>
+              <mxPoint x="1690" y="860"/>
+              <mxPoint x="1690" y="952"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e18" value="16  Structured audit events" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#666666;strokeWidth=2;dashed=1;endArrow=block;endFill=1;labelBackgroundColor=#ffffff;fontSize=9;exitX=0.8;exitY=1;entryX=0.531;entryY=0;" edge="1" parent="1" source="download_app" target="monitor">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1214" y="1020"/>
+              <mxPoint x="1660" y="1020"/>
+              <mxPoint x="1660" y="1130"/>
+              <mxPoint x="1115" y="1130"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend" value="&lt;b&gt;Legend&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666;verticalAlign=top;align=left;spacing=8;fontSize=12;container=1;pointerEvents=0;" vertex="1" parent="1">
+          <mxGeometry x="30" y="1310" width="2140" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_service" value="Service / application" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;fontSize=11;" vertex="1" parent="legend">
+          <mxGeometry x="20" y="40" width="150" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_data" value="Authoritative data" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=center;fontSize=11;" vertex="1" parent="legend">
+          <mxGeometry x="190" y="40" width="150" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_queue" value="Queue / durable handoff" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=center;fontSize=11;" vertex="1" parent="legend">
+          <mxGeometry x="360" y="40" width="170" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_auth" value="Identity / secret boundary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;align=center;fontSize=11;" vertex="1" parent="legend">
+          <mxGeometry x="550" y="40" width="170" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_external" value="External system" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;align=center;fontSize=11;" vertex="1" parent="legend">
+          <mxGeometry x="740" y="40" width="150" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_sync" value="Synchronous / data" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#0078d4;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="legend">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="930" y="62" as="sourcePoint"/>
+            <mxPoint x="1090" y="62" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg_async" value="Async queue message" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#d79b00;strokeWidth=2;dashed=1;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="legend">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1150" y="62" as="sourcePoint"/>
+            <mxPoint x="1310" y="62" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg_security" value="Authentication / authorization" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#9673a6;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="legend">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1370" y="62" as="sourcePoint"/>
+            <mxPoint x="1560" y="62" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg_telemetry" value="Telemetry" style="edgeStyle=orthogonalEdgeStyle;html=1;strokeColor=#666666;strokeWidth=1;dashed=1;endArrow=open;endFill=0;fontSize=11;labelBackgroundColor=#ffffff;" edge="1" parent="legend">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1620" y="62" as="sourcePoint"/>
+            <mxPoint x="1780" y="62" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="why-service-bus" name="Why Service Bus">
+    <mxGraphModel dx="1800" dy="1120" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1120" math="0" shadow="0" adaptiveColors="auto">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="w_title" value="&lt;b&gt;Why Put Service Bus Between Azure DevOps and Client Notification?&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=24;fontColor=#1f2937;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1720" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="w_subtitle" value="Azure DevOps can read the protected recipient Secure File and call SendGrid directly. The decision is about PII boundaries, recovery and operational ownership—not technical possibility." style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontColor=#4b5563;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="1720" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="comparison" value="Direct Azure DevOps vs. Service Bus + Worker" style="swimlane;startSize=40;html=1;rounded=1;collapsible=0;horizontal=1;container=1;pointerEvents=0;fillColor=#ffffff;strokeColor=#666666;fontColor=#333333;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="40" y="100" width="1720" height="390" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_h_concern" value="&lt;b&gt;Concern&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e5e7eb;strokeColor=#6b7280;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="comparison">
+          <mxGeometry x="20" y="50" width="240" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_h_direct" value="&lt;b&gt;Azure DevOps reads recipient Secure File + sends email&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="comparison">
+          <mxGeometry x="260" y="50" width="690" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_h_queue" value="&lt;b&gt;Service Bus + Go Container App worker + Blob receipts&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="comparison">
+          <mxGeometry x="950" y="50" width="750" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_c1" value="&lt;b&gt;Security boundary&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#9ca3af;align=left;verticalAlign=middle;spacingLeft=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="20" y="95" width="240" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_d1" value="The pipeline job workspace contains recipient PII and the pipeline also receives SendGrid-send permission." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fffaf5;strokeColor=#d79b00;align=left;verticalAlign=middle;spacing=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="260" y="95" width="690" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_q1" value="Pipeline uploads protected batches and enqueues references only; the worker holds narrow Blob-read, receipt-write and email permissions." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f6fff5;strokeColor=#82b366;align=left;verticalAlign=middle;spacing=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="950" y="95" width="750" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_c2" value="&lt;b&gt;Temporary failure&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#9ca3af;align=left;verticalAlign=middle;spacingLeft=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="20" y="140" width="240" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_d2" value="SendGrid outage or throttling blocks or fails the release pipeline." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fffaf5;strokeColor=#d79b00;align=left;verticalAlign=middle;spacing=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="260" y="140" width="690" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_q2" value="The message remains durable, is retried with Peek-Lock and reaches the DLQ after bounded failures." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f6fff5;strokeColor=#82b366;align=left;verticalAlign=middle;spacing=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="950" y="140" width="750" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_c3" value="&lt;b&gt;Partial send&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#9ca3af;align=left;verticalAlign=middle;spacingLeft=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="20" y="185" width="240" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_d3" value="The pipeline must implement durable per-recipient state or cannot resume safely." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fffaf5;strokeColor=#d79b00;align=left;verticalAlign=middle;spacing=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="260" y="185" width="690" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_q3" value="Conditional Blob receipts store release/recipient status so the worker can continue from durable state without a database." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f6fff5;strokeColor=#82b366;align=left;verticalAlign=middle;spacing=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="950" y="185" width="750" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_c4" value="&lt;b&gt;Pipeline rerun&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#9ca3af;align=left;verticalAlign=middle;spacingLeft=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="20" y="230" width="240" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_d4" value="A blind rerun can duplicate accepted emails or skip clients that were never reached." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fffaf5;strokeColor=#d79b00;align=left;verticalAlign=middle;spacing=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="260" y="230" width="690" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_q4" value="Deterministic release/operation/key-version/HMAC-recipient receipt paths and conditional writes prevent blind reprocessing." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f6fff5;strokeColor=#82b366;align=left;verticalAlign=middle;spacing=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="950" y="230" width="750" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_c5" value="&lt;b&gt;Scale and runtime&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#9ca3af;align=left;verticalAlign=middle;spacingLeft=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="20" y="275" width="240" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_d5" value="The build agent remains occupied and is exposed to job timeouts and email-rate limits." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fffaf5;strokeColor=#d79b00;align=left;verticalAlign=middle;spacing=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="260" y="275" width="690" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_q5" value="The worker can batch, throttle and scale independently from release execution." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f6fff5;strokeColor=#82b366;align=left;verticalAlign=middle;spacing=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="950" y="275" width="750" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_c6" value="&lt;b&gt;Ownership&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#9ca3af;align=left;verticalAlign=middle;spacingLeft=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="20" y="320" width="240" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_d6" value="CI/CD deployment and customer-facing business operations are mixed together." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fffaf5;strokeColor=#d79b00;align=left;verticalAlign=middle;spacing=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="260" y="320" width="690" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cmp_q6" value="Release publication and client distribution have separate failure and permission boundaries." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f6fff5;strokeColor=#82b366;align=left;verticalAlign=middle;spacing=10;fontSize=11;" vertex="1" parent="comparison">
+          <mxGeometry x="950" y="320" width="750" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="recommendation" value="&lt;b&gt;Recommendation:&lt;/b&gt; use Service Bus + Go Container App worker + conditional Blob receipts. This preserves durable recovery without introducing an application database; direct pipeline sending still lacks an independent failure boundary." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="120" y="500" width="1560" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="failure" value="Partial-send failure: 10,000 recipients" style="swimlane;startSize=40;html=1;rounded=1;collapsible=0;horizontal=1;container=1;pointerEvents=0;fillColor=#ffffff;strokeColor=#666666;fontColor=#333333;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="40" y="560" width="1720" height="430" as="geometry"/>
+        </mxCell>
+        <mxCell id="direct_fail" value="Direct Azure DevOps path" style="swimlane;startSize=35;html=1;rounded=1;collapsible=0;horizontal=1;container=1;pointerEvents=0;fillColor=#fff5f5;strokeColor=#b85450;fontColor=#8b1e1e;fontStyle=1;fontSize=13;" vertex="1" parent="failure">
+          <mxGeometry x="20" y="50" width="820" height="350" as="geometry"/>
+        </mxCell>
+        <mxCell id="df1" value="&lt;b&gt;1&lt;/b&gt;&lt;br&gt;Blob upload succeeds" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=middle;fontSize=11;" vertex="1" parent="direct_fail">
+          <mxGeometry x="20" y="60" width="130" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="df2" value="&lt;b&gt;2&lt;/b&gt;&lt;br&gt;Read 10,000 CSV rows" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=middle;fontSize=11;" vertex="1" parent="direct_fail">
+          <mxGeometry x="180" y="60" width="130" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="df3" value="&lt;b&gt;3&lt;/b&gt;&lt;br&gt;SendGrid accepts 4,000" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=center;verticalAlign=middle;fontSize=11;" vertex="1" parent="direct_fail">
+          <mxGeometry x="340" y="60" width="130" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="df4" value="&lt;b&gt;4&lt;/b&gt;&lt;br&gt;SendGrid times out" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;align=center;verticalAlign=middle;fontSize=11;" vertex="1" parent="direct_fail">
+          <mxGeometry x="500" y="60" width="130" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="df5" value="&lt;b&gt;5&lt;/b&gt;&lt;br&gt;Pipeline fails" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=center;verticalAlign=middle;fontSize=11;" vertex="1" parent="direct_fail">
+          <mxGeometry x="660" y="60" width="130" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="df_note" value="A rerun cannot know which accepted requests ultimately delivered. Without durable per-recipient state, it may resend accepted emails or skip clients that were never reached." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450;dashed=1;align=left;verticalAlign=middle;spacing=12;fontSize=12;" vertex="1" parent="direct_fail">
+          <mxGeometry x="30" y="165" width="760" height="75" as="geometry"/>
+        </mxCell>
+        <mxCell id="df_result" value="&lt;b&gt;Result:&lt;/b&gt; duplicate emails, missed clients, or manual reconciliation." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="direct_fail">
+          <mxGeometry x="170" y="270" width="480" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="q_recovery" value="Service Bus + Go Container App worker + Blob receipts" style="swimlane;startSize=35;html=1;rounded=1;collapsible=0;horizontal=1;container=1;pointerEvents=0;fillColor=#f5fff5;strokeColor=#82b366;fontColor=#376b36;fontStyle=1;fontSize=13;" vertex="1" parent="failure">
+          <mxGeometry x="880" y="50" width="820" height="350" as="geometry"/>
+        </mxCell>
+        <mxCell id="qr1" value="&lt;b&gt;1&lt;/b&gt;&lt;br&gt;Upload snapshots + enqueue" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;align=center;verticalAlign=middle;fontSize=11;" vertex="1" parent="q_recovery">
+          <mxGeometry x="20" y="60" width="130" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="qr2" value="&lt;b&gt;2&lt;/b&gt;&lt;br&gt;Read batch + create receipts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=center;verticalAlign=middle;fontSize=10;" vertex="1" parent="q_recovery">
+          <mxGeometry x="180" y="60" width="130" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="qr3" value="&lt;b&gt;3&lt;/b&gt;&lt;br&gt;Record 4,000 accepted" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=center;verticalAlign=middle;fontSize=11;" vertex="1" parent="q_recovery">
+          <mxGeometry x="340" y="60" width="130" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="qr4" value="&lt;b&gt;4&lt;/b&gt;&lt;br&gt;Timeout + redelivery" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=center;verticalAlign=middle;fontSize=11;" vertex="1" parent="q_recovery">
+          <mxGeometry x="500" y="60" width="130" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="qr5" value="&lt;b&gt;5&lt;/b&gt;&lt;br&gt;Resume by Blob receipt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=center;verticalAlign=middle;fontSize=11;" vertex="1" parent="q_recovery">
+          <mxGeometry x="660" y="60" width="130" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="qr_note" value="The worker uses CLAIMED / SEND_STARTED / RETRYABLE / ACCEPTED / SIMULATED / UNKNOWN / FAILED receipt states. Receipts use an HMAC-derived recipient ID, record the operation and key version, and contain no raw name or email. UNKNOWN outcomes require reconciliation or a deliberate retry policy." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;dashed=1;align=left;verticalAlign=middle;spacing=12;fontSize=10;" vertex="1" parent="q_recovery">
+          <mxGeometry x="30" y="165" width="760" height="75" as="geometry"/>
+        </mxCell>
+        <mxCell id="qr_result" value="&lt;b&gt;Result:&lt;/b&gt; durable handoff and controlled recovery without a blind pipeline rerun." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="q_recovery">
+          <mxGeometry x="150" y="270" width="520" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="df_e1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#b85450;strokeWidth=2;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="direct_fail" source="df1" target="df2"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="df_e2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#b85450;strokeWidth=2;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="direct_fail" source="df2" target="df3"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="df_e3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#b85450;strokeWidth=2;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="direct_fail" source="df3" target="df4"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="df_e4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#b85450;strokeWidth=2;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="direct_fail" source="df4" target="df5"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="qr_e1" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#82b366;strokeWidth=2;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="q_recovery" source="qr1" target="qr2"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="qr_e2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#82b366;strokeWidth=2;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="q_recovery" source="qr2" target="qr3"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="qr_e3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#82b366;strokeWidth=2;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="q_recovery" source="qr3" target="qr4"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="qr_e4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;flowAnimation=1;flowAnimationDuration=1200;flowAnimationTimingFunction=linear;flowAnimationDirection=normal;strokeColor=#82b366;strokeWidth=2;endArrow=block;endFill=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="q_recovery" source="qr4" target="qr5"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="at_least_once" value="&lt;b&gt;Important:&lt;/b&gt; Service Bus is at-least-once; it does not make email exactly-once. Use {release_id}/{operation_id}/{key_version}/{HMAC_key(normalized_email)} receipts, conditional Blob writes, bounded retries, DLQ handling and reconciliation of ambiguous SendGrid outcomes." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;align=center;verticalAlign=middle;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="100" y="1010" width="1600" height="70" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

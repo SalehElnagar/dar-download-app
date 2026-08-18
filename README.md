@@ -122,6 +122,7 @@ Do not promote directly from this branch. Production requires all of the followi
 
 See:
 
+- [Architecture diagrams](docs/architecture/README.md)
 - [Runtime configuration](docs/configuration.md)
 - [Release distribution operations](docs/release-distribution.md)
 - [Repository migration and rollback](docs/migration.md)
