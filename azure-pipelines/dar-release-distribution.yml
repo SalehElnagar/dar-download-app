@@ -1,0 +1,171 @@
+trigger:
+  batch: true
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - releases/**
+
+pr: none
+
+variables:
+  - group: dar-release-distribution-production-nonsecret
+
+stages:
+  - stage: Validate
+    displayName: Validate exact release and protected recipient input
+    pool:
+      vmImage: ubuntu-24.04
+    jobs:
+      - job: ValidateRelease
+        steps:
+          - task: DownloadSecureFile@1
+            name: recipientsFile
+            displayName: Download protected recipient cohort
+            inputs:
+              secureFile: $(DAR_RECIPIENTS_SECURE_FILE)
+
+          - checkout: self
+            clean: true
+            fetchDepth: 1
+            fetchTags: false
+            lfs: true
+            persistCredentials: false
+
+          - task: GoTool@0
+            displayName: Select pinned Go toolchain
+            inputs:
+              version: "1.26.6"
+
+          - bash: |
+              set -euo pipefail
+              if [ "$(Build.SourceBranch)" != "refs/heads/main" ]; then
+                echo "This pipeline accepts the main branch only." >&2
+                exit 1
+              fi
+              if [ "$(Build.Repository.Provider)" != "GitHub" ]; then
+                echo "This pipeline accepts GitHub as its source provider only." >&2
+                exit 1
+              fi
+              if [[ ! "$(Build.SourceVersion)" =~ ^[0-9a-f]{40}$ ]]; then
+                echo "Build.SourceVersion is invalid." >&2
+                exit 1
+              fi
+              test "$(git rev-parse HEAD)" = "$(Build.SourceVersion)"
+              test "$(git status --porcelain)" = ""
+            displayName: Bind checkout to exact GitHub main commit
+
+          - bash: |
+              set -euo pipefail
+              go mod download
+              go vet ./...
+              go test -count=1 ./...
+              go run ./cmd/dar-release-publisher validate \
+                --repository-root "$(Build.SourcesDirectory)" \
+                --release-id "$(DAR_RELEASE_ID)" \
+                --recipients-file "$(recipientsFile.secureFilePath)"
+            displayName: Validate Go contracts and release input
+
+          - bash: |
+              set -euo pipefail
+              mkdir -p "$(Build.ArtifactStagingDirectory)/validated-input"
+              sha256sum "$(recipientsFile.secureFilePath)" | awk '{print $1}' \
+                >"$(Build.ArtifactStagingDirectory)/validated-input/recipients.sha256"
+              CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+                -mod=readonly -trimpath -buildvcs=false \
+                -o "$(Build.ArtifactStagingDirectory)/validated-input/dar-release-publisher" \
+                ./cmd/dar-release-publisher
+              sha256sum "$(Build.ArtifactStagingDirectory)/validated-input/dar-release-publisher" \
+                | awk '{print $1}' \
+                >"$(Build.ArtifactStagingDirectory)/validated-input/publisher.sha256"
+            displayName: Bind recipient digest and exact publisher binary
+
+          - task: PublishPipelineArtifact@1
+            displayName: Transfer validated recipient digest
+            inputs:
+              targetPath: $(Build.ArtifactStagingDirectory)/validated-input
+              artifact: validated-release-input
+              publishLocation: pipeline
+
+  - stage: Publish
+    displayName: Publish immutable release and queue references
+    dependsOn: Validate
+    pool:
+      name: $(DAR_PRIVATE_AGENT_POOL)
+      demands:
+        - dar.private-network -equals true
+    jobs:
+      - deployment: PublishRelease
+        displayName: Publish approved release
+        environment: dar-release-distribution-production
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: DownloadSecureFile@1
+                  name: recipientsFile
+                  displayName: Download protected recipient cohort
+                  inputs:
+                    secureFile: $(DAR_RECIPIENTS_SECURE_FILE)
+
+                - checkout: self
+                  clean: true
+                  fetchDepth: 1
+                  fetchTags: false
+                  lfs: true
+                  persistCredentials: false
+
+                - task: DownloadPipelineArtifact@2
+                  displayName: Receive validated recipient digest
+                  inputs:
+                    artifact: validated-release-input
+                    path: $(Pipeline.Workspace)/validated-release-input
+
+                - bash: |
+                    set -euo pipefail
+                    test "$(git rev-parse HEAD)" = "$(Build.SourceVersion)"
+                    expected="$(tr -d '\n' <"$(Pipeline.Workspace)/validated-release-input/recipients.sha256")"
+                    if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+                      echo "Validated recipient digest is invalid." >&2
+                      exit 1
+                    fi
+                    actual="$(sha256sum "$(recipientsFile.secureFilePath)" | awk '{print $1}')"
+                    test "$actual" = "$expected"
+                    publisher="$(Pipeline.Workspace)/validated-release-input/dar-release-publisher"
+                    expected_publisher="$(tr -d '\n' <"$(Pipeline.Workspace)/validated-release-input/publisher.sha256")"
+                    if [[ ! "$expected_publisher" =~ ^[0-9a-f]{64}$ ]]; then
+                      echo "Validated publisher digest is invalid." >&2
+                      exit 1
+                    fi
+                    actual_publisher="$(sha256sum "$publisher" | awk '{print $1}')"
+                    test "$actual_publisher" = "$expected_publisher"
+                    chmod 0500 "$publisher"
+                  displayName: Verify exact source, recipient input, and publisher
+
+                - task: AzureCLI@2
+                  displayName: Publish with workload-federated Azure identity
+                  inputs:
+                    azureSubscription: $(DAR_AZURE_WORKLOAD_IDENTITY_SERVICE_CONNECTION)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    addSpnToEnvironment: false
+                    visibleAzLogin: false
+                    useGlobalConfig: false
+                    failOnStandardError: false
+                    inlineScript: |
+                      set -euo pipefail
+                      export DAR_PUBLISHER_REPOSITORY="$(Build.Repository.Name)"
+                      export DAR_PUBLISHER_SOURCE_COMMIT_SHA="$(Build.SourceVersion)"
+                      export DAR_PUBLISHER_SOURCE_COMMIT_EPOCH="$(git show -s --format=%ct HEAD)"
+                      export DAR_PUBLISHER_REPOSITORY_ROOT="$(Build.SourcesDirectory)"
+                      export DAR_PUBLISHER_RELEASE_ID="$(DAR_RELEASE_ID)"
+                      export DAR_PUBLISHER_RECIPIENTS_FILE="$(recipientsFile.secureFilePath)"
+                      export DAR_PUBLISHER_STORAGE_ACCOUNT_NAME="$(DAR_STORAGE_ACCOUNT_NAME)"
+                      export DAR_PUBLISHER_RELEASES_CONTAINER="$(DAR_RELEASES_CONTAINER)"
+                      export DAR_PUBLISHER_MANIFESTS_CONTAINER="$(DAR_MANIFESTS_CONTAINER)"
+                      export DAR_PUBLISHER_BATCHES_CONTAINER="$(DAR_BATCHES_CONTAINER)"
+                      export DAR_PUBLISHER_SERVICEBUS_NAMESPACE="$(DAR_SERVICEBUS_NAMESPACE)"
+                      export DAR_PUBLISHER_SERVICEBUS_QUEUE="$(DAR_SERVICEBUS_QUEUE)"
+                      export DAR_PUBLISHER_APPLICATION_ORIGIN="$(DAR_APPLICATION_ORIGIN)"
+                      "$(Pipeline.Workspace)/validated-release-input/dar-release-publisher" publish

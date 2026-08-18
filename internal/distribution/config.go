@@ -123,7 +123,6 @@ func ParseWorkerEnvironment(environment map[string]string) (RuntimeConfig, error
 		WorkerServiceBusQueueEnv, WorkerManifestsContainerEnv, WorkerBatchesContainerEnv,
 		WorkerReceiptsContainerEnv, WorkerHMACKeyEnv, WorkerHMACKeyVersionEnv,
 		WorkerMailModeEnv, WorkerMailFromEmailEnv, WorkerMailFromNameEnv,
-		WorkerAllowedRecipientsEnv,
 	}
 	for _, name := range required {
 		if strings.TrimSpace(environment[name]) == "" {
@@ -152,9 +151,15 @@ func ParseWorkerEnvironment(environment map[string]string) (RuntimeConfig, error
 		base64.StdEncoding.EncodeToString(hmacKey) != environment[WorkerHMACKeyEnv] {
 		return RuntimeConfig{}, ErrWorkerConfig
 	}
+	mailMode := MailMode(environment[WorkerMailModeEnv])
 	var recipients []string
-	if err := json.Unmarshal([]byte(environment[WorkerAllowedRecipientsEnv]), &recipients); err != nil ||
-		len(recipients) == 0 {
+	if mailMode == MailModeLive {
+		if _, configured := environment[WorkerAllowedRecipientsEnv]; configured {
+			return RuntimeConfig{}, ErrWorkerConfig
+		}
+	} else if err := json.Unmarshal(
+		[]byte(environment[WorkerAllowedRecipientsEnv]), &recipients,
+	); err != nil || len(recipients) == 0 {
 		return RuntimeConfig{}, ErrWorkerConfig
 	}
 	maxAttempts, err := boundedInteger(environment[WorkerMaxAttemptsEnv], 5, 1, 5)
@@ -177,7 +182,7 @@ func ParseWorkerEnvironment(environment map[string]string) (RuntimeConfig, error
 		IdentityClientID: identity, StorageAccount: storageAccount,
 		ServiceBusNamespace: namespace, ServiceBusQueue: queue,
 		ManifestsContainer: containers[0], BatchesContainer: containers[1], ReceiptsContainer: containers[2],
-		HMACKeyVersion: environment[WorkerHMACKeyVersionEnv], MailMode: MailMode(environment[WorkerMailModeEnv]),
+		HMACKeyVersion: environment[WorkerHMACKeyVersionEnv], MailMode: mailMode,
 		MailFromEmail: environment[WorkerMailFromEmailEnv], MailFromName: environment[WorkerMailFromNameEnv],
 		MaxAttempts: maxAttempts, ClaimTimeout: time.Duration(claimSeconds) * time.Second,
 		MailTimeout: time.Duration(mailSeconds) * time.Second, HealthPort: healthPort,

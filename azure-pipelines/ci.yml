@@ -1,0 +1,88 @@
+trigger:
+  batch: true
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-24.04
+
+stages:
+  - stage: Candidate
+    displayName: Validate application and worker candidate
+    jobs:
+      - job: SecurityCandidate
+        timeoutInMinutes: 45
+        steps:
+          - checkout: self
+            clean: true
+            fetchDepth: 1
+            fetchTags: false
+            lfs: true
+            persistCredentials: false
+
+          - task: GoTool@0
+            displayName: Select pinned Go toolchain
+            inputs:
+              version: "1.26.6"
+
+          - bash: ./scripts/bootstrap-tools.sh
+            displayName: Install checksum-verified security tools
+
+          - bash: ./scripts/prebuild.sh
+            displayName: Run source security gate
+
+          - bash: |
+              set -euo pipefail
+              release_directory=
+              for candidate in releases/*; do
+                if [[ -d "$candidate" ]]; then
+                  release_directory=$candidate
+                  break
+                fi
+              done
+              if [[ -n "$release_directory" ]]; then
+                go run ./cmd/dar-release-publisher validate \
+                  --repository-root "$(Build.SourcesDirectory)" \
+                  --release-id dar_ci_validation_01 \
+                  --recipients-file recipients/notification-recipients.example.csv
+              fi
+            displayName: Validate release shape with synthetic recipients when present
+
+          - bash: |
+              set -euo pipefail
+              export IMAGE_REF="dar-download-app:azdo-$(Build.SourceVersion)"
+              export VERSION="azdo-$(Build.SourceVersion)"
+              ./scripts/build-image.sh
+            displayName: Build exact download application image
+
+          - bash: |
+              set -euo pipefail
+              export IMAGE_REF="dar-download-app:azdo-$(Build.SourceVersion)"
+              ./scripts/postbuild.sh
+            displayName: Scan and dynamically test exact image
+
+          - bash: |
+              set -euo pipefail
+              export WORKER_IMAGE_REF="dar-distribution-worker:azdo-$(Build.SourceVersion)"
+              export VERSION="azdo-$(Build.SourceVersion)"
+              ./scripts/build-worker-image.sh
+            displayName: Build exact notification worker image
+
+          - bash: |
+              set -euo pipefail
+              export WORKER_IMAGE_REF="dar-distribution-worker:azdo-$(Build.SourceVersion)"
+              ./scripts/postbuild-worker.sh
+            displayName: Generate SBOMs and scan exact worker image
+
+          - task: PublishPipelineArtifact@1
+            displayName: Retain successful candidate evidence
+            inputs:
+              targetPath: .security/evidence
+              artifact: security-evidence-$(Build.BuildId)
+              publishLocation: pipeline

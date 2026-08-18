@@ -1,5 +1,6 @@
 .git
 .github
+azure-pipelines
 .agents
 .specify
 .security
@@ -11,6 +12,8 @@ scripts
 .env.*
 *.dar
 *.zip
+releases
+recipients
 *.log
 *.md
 !go.mod

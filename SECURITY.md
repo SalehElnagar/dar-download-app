@@ -44,11 +44,17 @@ broad suppressions, and exceptions for secret findings are forbidden.
 For a suspected compromise:
 
 1. Stop promotion and disable the affected application revision.
-2. Revoke the workload identity's Blob role if storage authority may be compromised.
-3. Preserve image digest, SBOM, attestations, audit logs, and gate evidence.
-4. Patch and rebuild from reviewed source; rerun every source and image gate.
-5. Publish a new signed immutable version and deliberately roll it out.
-6. Complete an authorized impact assessment before restoring access.
+2. Pause new release publication and queue consumption at their real enforcement points when
+   notification authority may be compromised; do not delete queued or dead-letter evidence.
+3. Revoke the exact publisher, worker, or download identity grants that are affected. Rotate the
+   SendGrid or receipt-HMAC secret through its owner only when exposure is plausible.
+4. Preserve image digests, SBOMs, attestations, immutable manifests, receipts, provider event
+   identifiers, audit logs, and gate evidence.
+5. Reconcile unknown or already-issued email effects through provider readback and receipts;
+   stopping a worker does not prove that SendGrid rejected an earlier request.
+6. Patch and rebuild from reviewed source; rerun every source and image gate.
+7. Publish a new signed immutable version and deliberately roll it out.
+8. Complete an authorized impact assessment before restoring access.
 
 Deployment, identity-provider, storage, and RBAC actions are owned by the platform repository and its
 approved operators; this application repository performs none of them.

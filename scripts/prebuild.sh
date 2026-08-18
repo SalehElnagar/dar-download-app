@@ -66,6 +66,8 @@ printf '%s\n' "[prebuild 9/14] Go vulnerability database"
 govulncheck ./... | tee "$evidence_dir/govulncheck.txt"
 
 printf '%s\n' "[prebuild 10/14] Go security analysis"
+gosec_report="$evidence_dir/gosec.json"
+: >"$gosec_report"
 gosec \
   -quiet \
   -severity high \
@@ -73,8 +75,11 @@ gosec \
   -nosec-require-justification \
   -nosec-require-rules \
   -fmt json \
-  -out "$evidence_dir/gosec.json" \
+  -out "$gosec_report" \
   ./...
+if [[ ! -s "$gosec_report" ]]; then
+  printf '%s\n' '{"Issues":[]}' >"$gosec_report"
+fi
 
 printf '%s\n' "[prebuild 11/14] repository policy analysis"
 "$repo_root/scripts/test-semgrep-rules.sh"
@@ -107,10 +112,7 @@ trivy fs \
   --output "$evidence_dir/trivy-fs.json" \
   .
 
-printf '%s\n' "[prebuild 13/14] workflow and gate-order validation"
-if compgen -G '.github/workflows/*.yaml' >/dev/null; then
-  actionlint .github/workflows/*.yaml
-fi
+printf '%s\n' "[prebuild 13/14] Azure DevOps pipeline and gate-order validation"
 "$repo_root/scripts/test-security-workflow.sh"
 "$repo_root/scripts/test-provenance.sh"
 

@@ -1,9 +1,11 @@
 SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
+.NOTPARALLEL: candidate
 
 IMAGE_REF ?= dar-download-app:local
+WORKER_IMAGE_REF ?= dar-distribution-worker:local
 
-.PHONY: help bootstrap format test test-security prebuild image postbuild candidate
+.PHONY: help bootstrap format test test-security prebuild image postbuild worker-image worker-postbuild candidate
 
 help:
 	@printf '%s\n' \
@@ -14,7 +16,9 @@ help:
 	  'make prebuild        Run the hard source-security gate' \
 	  'make image           Build only from current passing pre-build evidence' \
 	  'make postbuild       Scan and DAST the exact built image' \
-	  'make candidate       Run prebuild, image, and postbuild in order'
+	  'make worker-image    Build the worker from current passing evidence' \
+	  'make worker-postbuild Scan the exact worker image' \
+	  'make candidate       Validate both production images in order'
 
 bootstrap:
 	mise install
@@ -47,4 +51,10 @@ image:
 postbuild:
 	IMAGE_REF='$(IMAGE_REF)' ./scripts/postbuild.sh
 
-candidate: prebuild image postbuild
+worker-image:
+	WORKER_IMAGE_REF='$(WORKER_IMAGE_REF)' ./scripts/build-worker-image.sh
+
+worker-postbuild:
+	WORKER_IMAGE_REF='$(WORKER_IMAGE_REF)' ./scripts/postbuild-worker.sh
+
+candidate: prebuild image postbuild worker-image worker-postbuild

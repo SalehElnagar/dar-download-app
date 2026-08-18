@@ -11,11 +11,13 @@ printf 'image_id=sha256:%064d\n' 1 >"$fixture_dir/image.ok"
 printf '%s\n' '{"spdxVersion":"SPDX-2.3"}' >"$fixture_dir/sbom.spdx.json"
 
 EVIDENCE_DIR="$fixture_dir" \
-  GITHUB_REPOSITORY=SalehElnagar/dar-download-app \
-  GITHUB_SHA=2222222222222222222222222222222222222222 \
-  GITHUB_REF=refs/tags/v0.1.0 \
-  GITHUB_RUN_ID=123 \
-  GITHUB_RUN_ATTEMPT=1 \
+  SOURCE_REPOSITORY=SalehElnagar/dar-download-app \
+  SOURCE_REVISION=2222222222222222222222222222222222222222 \
+  SOURCE_REF=refs/tags/v0.1.0 \
+  BUILD_ID=123 \
+  BUILD_ATTEMPT=1 \
+  BUILDER_ID=https://dev.azure.com/example/project/_build/definitions/1 \
+  BUILD_URI='https://dev.azure.com/example/project/_build/results?buildId=123' \
   RELEASE_TAG=v0.1.0 \
   "$repo_root/scripts/create-provenance.sh" >/dev/null
 
@@ -28,11 +30,13 @@ jq -e '
 ' "$fixture_dir/provenance.slsa.json" >/dev/null
 
 if EVIDENCE_DIR="$fixture_dir" \
-  GITHUB_REPOSITORY=SalehElnagar/dar-download-app \
-  GITHUB_SHA=not-a-revision \
-  GITHUB_REF=refs/tags/v0.1.0 \
-  GITHUB_RUN_ID=123 \
-  GITHUB_RUN_ATTEMPT=1 \
+  SOURCE_REPOSITORY=SalehElnagar/dar-download-app \
+  SOURCE_REVISION=not-a-revision \
+  SOURCE_REF=refs/tags/v0.1.0 \
+  BUILD_ID=123 \
+  BUILD_ATTEMPT=1 \
+  BUILDER_ID=https://dev.azure.com/example/project/_build/definitions/1 \
+  BUILD_URI='https://dev.azure.com/example/project/_build/results?buildId=123' \
   RELEASE_TAG=v0.1.0 \
   "$repo_root/scripts/create-provenance.sh" >/dev/null 2>&1; then
   printf '%s\n' "invalid provenance input unexpectedly succeeded." >&2

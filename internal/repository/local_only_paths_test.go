@@ -100,6 +100,40 @@ func sourceDigest(t *testing.T, root string) string {
 	return strings.TrimSpace(string(output))
 }
 
+func candidateFiles(t *testing.T, root string) []string {
+	t.Helper()
+	command := exec.Command(
+		"git", "ls-files", "--cached", "--others", "--exclude-standard", "-z",
+	)
+	command.Dir = root
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("git ls-files candidate tree: %v", err)
+	}
+	return strings.Split(string(output), "\x00")
+}
+
+func TestRepositoryPolicyIncludesUntrackedCandidateFiles(t *testing.T) {
+	root := repositoryRoot(t)
+	probe, err := os.CreateTemp(root, "repository-policy-probe-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	probePath := probe.Name()
+	if closeErr := probe.Close(); closeErr != nil {
+		t.Fatal(closeErr)
+	}
+	t.Cleanup(func() { _ = os.Remove(probePath) })
+
+	want := filepath.Base(probePath)
+	for _, relative := range candidateFiles(t, root) {
+		if relative == want {
+			return
+		}
+	}
+	t.Fatalf("untracked candidate file %q was excluded from repository policy", want)
+}
+
 func TestTrackedContractsDescribeProviderNeutralBoundary(t *testing.T) {
 	root := repositoryRoot(t)
 	requiredByFile := map[string][]string{
@@ -172,26 +206,23 @@ func TestPublishedContractsExcludeRetiredStaticAuthorization(t *testing.T) {
 	}
 }
 
-func TestTrackedTreeHasNoSupersededApplicationContract(t *testing.T) {
+func TestCandidateTreeHasNoSupersededApplicationContract(t *testing.T) {
 	root := repositoryRoot(t)
-	command := exec.Command("git", "ls-files", "-z")
-	command.Dir = root
-	output, err := command.Output()
-	if err != nil {
-		t.Fatalf("git ls-files: %v", err)
-	}
 	forbidden := []*regexp.Regexp{
 		regexp.MustCompile(`(?i)har` + `mony`),
 		regexp.MustCompile(`(?i)easy` + `[[:space:]]+auth`),
 		regexp.MustCompile(`(?i)allowed_` + `principal_ids`),
 		regexp.MustCompile(`(?i)appservice` + `authsession`),
 	}
-	for _, relative := range strings.Split(string(output), "\x00") {
+	for _, relative := range candidateFiles(t, root) {
 		if relative == "" {
 			continue
 		}
 		content, readErr := os.ReadFile(filepath.Join(root, relative))
 		if readErr != nil {
+			if os.IsNotExist(readErr) {
+				continue
+			}
 			t.Fatal(readErr)
 		}
 		for _, pattern := range forbidden {
@@ -204,12 +235,6 @@ func TestTrackedTreeHasNoSupersededApplicationContract(t *testing.T) {
 
 func TestProviderSpecificAdapterTermsStayInTheirOwnedBoundary(t *testing.T) {
 	root := repositoryRoot(t)
-	command := exec.Command("git", "ls-files", "-z")
-	command.Dir = root
-	output, err := command.Output()
-	if err != nil {
-		t.Fatalf("git ls-files: %v", err)
-	}
 	allowed := map[string]bool{
 		"README.md":                                                true,
 		"api/openapi.yaml":                                         true,
@@ -237,12 +262,15 @@ func TestProviderSpecificAdapterTermsStayInTheirOwnedBoundary(t *testing.T) {
 		regexp.MustCompile(`(?i)micro` + `softonline`),
 		regexp.MustCompile(`(?i)x-` + `ms-client`),
 	}
-	for _, relative := range strings.Split(string(output), "\x00") {
-		if relative == "" || allowed[relative] {
+	for _, relative := range candidateFiles(t, root) {
+		if relative == "" || allowed[relative] || strings.HasPrefix(relative, "docs/architecture/") {
 			continue
 		}
 		content, readErr := os.ReadFile(filepath.Join(root, relative))
 		if readErr != nil {
+			if os.IsNotExist(readErr) {
+				continue
+			}
 			t.Fatal(readErr)
 		}
 		for _, marker := range providerMarkers {

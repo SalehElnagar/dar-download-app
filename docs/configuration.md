@@ -1,7 +1,7 @@
-# Runtime Configuration Contract
+# Runtime and Publisher Configuration Contract
 
 The process reads only the following application-specific settings. These names are an
-intentional breaking POC contract and have no legacy aliases.
+intentional fail-closed contract and have no legacy aliases.
 
 | Variable | Required | Contract |
 | --- | --- | --- |
@@ -140,3 +140,57 @@ route without exposing storage internals.
 - Range and `If-Range` values are at most 128 bytes. One byte range is supported.
 - An object can be at most 256 MiB. The app opens sequential Blob segments of at most 4 MiB with
   one active Blob reader per download. Total request concurrency is a platform-enforced limit.
+
+## Notification worker
+
+| Variable | Required | Contract |
+| --- | --- | --- |
+| `DAR_WORKER_IDENTITY_CLIENT_ID` | yes | Dedicated worker user-assigned managed-identity client UUID |
+| `DAR_STORAGE_ACCOUNT_NAME` | yes | Private storage account |
+| `DAR_SERVICEBUS_NAMESPACE` | yes | Fully qualified namespace ending in `.servicebus.windows.net` |
+| `DAR_SERVICEBUS_QUEUE` | yes | Exact notification queue |
+| `DAR_MANIFESTS_CONTAINER` | yes | Published-manifest container |
+| `DAR_BATCHES_CONTAINER` | yes | Protected recipient-batch container |
+| `DAR_RECEIPTS_CONTAINER` | yes | Notification receipt container |
+| `DAR_RECEIPT_HMAC_KEY_B64` | yes, secret | Canonical Base64 32-to-64-byte HMAC key from a runtime secret reference |
+| `DAR_RECEIPT_HMAC_KEY_VERSION` | yes | Non-secret key-version label used in receipt paths |
+| `DAR_MAIL_MODE` | yes | `stub`, `sendgrid_sandbox`, or `sendgrid_live` |
+| `DAR_MAIL_FROM_EMAIL` | yes | Verified sender address |
+| `DAR_MAIL_FROM_NAME` | yes | Bounded sender display name |
+| `DAR_MAIL_ALLOWED_RECIPIENTS_JSON` | non-delivery modes only | Required bounded allowlist for `stub` and `sendgrid_sandbox`; must be absent for `sendgrid_live` |
+| `DAR_MAIL_API_KEY` | SendGrid modes, secret | SendGrid Mail Send-only API key from a runtime secret reference |
+| `DAR_STUB_ENDPOINT` | stub only | Exact approved HTTPS test endpoint; prohibited in SendGrid modes |
+| `DAR_MAX_ATTEMPTS` | no | 1 through 5; defaults to 5 |
+| `DAR_CLAIM_TIMEOUT_SECONDS` | no | 30 through 900; defaults to 300 |
+| `DAR_MAIL_TIMEOUT_SECONDS` | no | 1 through 30; defaults to 10 |
+| `DAR_HEALTH_PORT` | no | 1024 through 65535; defaults to 8081 |
+
+In live mode, recipients come only from the immutable batch whose Blob version, size, and digest
+the worker verifies. A second environment-variable copy of production customer emails is both
+unscalable and a conflicting PII source, so live startup rejects it.
+
+## Release publisher
+
+The publisher runs only inside the protected Azure DevOps publication job. It accepts no
+storage key, Service Bus connection string, SendGrid key, or recipient value through these
+settings:
+
+| Variable | Contract |
+| --- | --- |
+| `DAR_PUBLISHER_REPOSITORY` | Exact `owner/repository` from the Azure DevOps GitHub checkout |
+| `DAR_PUBLISHER_SOURCE_COMMIT_SHA` | Exact lowercase 40-character Git commit |
+| `DAR_PUBLISHER_SOURCE_COMMIT_EPOCH` | Source commit time used for deterministic timestamps |
+| `DAR_PUBLISHER_REPOSITORY_ROOT` | Exact checked-out repository root |
+| `DAR_PUBLISHER_RELEASE_ID` | Stable lowercase release-family identifier |
+| `DAR_PUBLISHER_RECIPIENTS_FILE` | Job-local Azure DevOps Secure File path |
+| `DAR_PUBLISHER_STORAGE_ACCOUNT_NAME` | Private Blob account |
+| `DAR_PUBLISHER_RELEASES_CONTAINER` | Immutable release container |
+| `DAR_PUBLISHER_MANIFESTS_CONTAINER` | Versioned manifest container |
+| `DAR_PUBLISHER_BATCHES_CONTAINER` | Protected versioned recipient-batch container |
+| `DAR_PUBLISHER_SERVICEBUS_NAMESPACE` | Fully qualified Service Bus namespace |
+| `DAR_PUBLISHER_SERVICEBUS_QUEUE` | Exact notification queue |
+| `DAR_PUBLISHER_APPLICATION_ORIGIN` | Approved HTTPS download-application origin |
+
+The publisher obtains Azure tokens through the Azure CLI session established by the
+workload-federated `AzureCLI@2` task. Blob versioning is mandatory: publication fails if Azure
+does not return exact Blob version IDs and ETags.

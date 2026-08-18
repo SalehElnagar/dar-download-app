@@ -12,8 +12,7 @@ import (
 
 var (
 	markdownLink = regexp.MustCompile(`\[[^]]+\]\(([^)]+)\)`)
-	actionUse    = regexp.MustCompile(`(?m)^\s*-?\s*uses:\s+([^@\s]+)@([^\s#]+)`)
-	fullCommit   = regexp.MustCompile(`^[a-f0-9]{40}$`)
+	productZIP   = regexp.MustCompile(`^releases/v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]{2}/dar-[0-9]+\.[0-9]+\.[0-9]+\.[0-9]{2}\.zip$`)
 )
 
 func repositoryRoot(t *testing.T) string {
@@ -72,35 +71,23 @@ func TestLocalMarkdownLinksResolve(t *testing.T) {
 	}
 }
 
-func TestWorkflowActionsUseFullCommitPins(t *testing.T) {
+func TestProductionAutomationUsesAzureDevOpsOnly(t *testing.T) {
+	root := repositoryRoot(t)
 	workflowDir := filepath.Join(repositoryRoot(t), ".github", "workflows")
-	entries, err := os.ReadDir(workflowDir)
-	if err != nil {
+	if entries, err := os.ReadDir(workflowDir); err == nil && len(entries) != 0 {
+		t.Fatalf("active GitHub Actions remain: %v", entries)
+	} else if err != nil && !os.IsNotExist(err) {
 		t.Fatal(err)
 	}
-	for _, entry := range entries {
-		if entry.IsDir() || (filepath.Ext(entry.Name()) != ".yaml" && filepath.Ext(entry.Name()) != ".yml") {
-			continue
+	for _, pipeline := range []string{"ci.yml", "dar-release-distribution.yml"} {
+		path := filepath.Join(root, "azure-pipelines", pipeline)
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
 		}
-		path := filepath.Join(workflowDir, entry.Name())
-		content, readErr := os.ReadFile(path)
-		if readErr != nil {
-			t.Fatal(readErr)
-		}
-		if strings.Contains(string(content), "pull_request_target:") {
-			t.Errorf("%s uses the privileged pull_request_target trigger", path)
-		}
-		uses := actionUse.FindAllStringSubmatch(string(content), -1)
-		if len(uses) == 0 {
-			t.Errorf("%s has no externally pinned actions", path)
-		}
-		for _, use := range uses {
-			if strings.HasPrefix(use[1], "./") {
-				continue
-			}
-			if !fullCommit.MatchString(use[2]) {
-				t.Errorf("%s action %s uses non-immutable ref %q", path, use[1], use[2])
-			}
+		text := string(content)
+		if !strings.Contains(text, "checkout: self") || strings.Contains(strings.ToLower(text), "sendgrid") {
+			t.Errorf("%s violates the Azure DevOps production boundary", path)
 		}
 	}
 }
@@ -142,14 +129,13 @@ func TestCanonicalContractDescribesBothApplicationRoutes(t *testing.T) {
 	}
 }
 
-func TestRepositoryExcludesDeploymentAndReleaseArtifacts(t *testing.T) {
+func TestRepositoryExcludesDeploymentStateAndAllowsOnlyCanonicalReleaseZIPs(t *testing.T) {
 	root := repositoryRoot(t)
 	forbiddenExtensions := map[string]bool{
 		".bicep":  true,
 		".dar":    true,
 		".tf":     true,
 		".tfvars": true,
-		".zip":    true,
 	}
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -160,6 +146,13 @@ func TestRepositoryExcludesDeploymentAndReleaseArtifacts(t *testing.T) {
 		}
 		if entry.IsDir() {
 			return nil
+		}
+		relative, relativeErr := filepath.Rel(root, path)
+		if relativeErr != nil {
+			return relativeErr
+		}
+		if filepath.Ext(entry.Name()) == ".zip" && !productZIP.MatchString(filepath.ToSlash(relative)) {
+			t.Errorf("noncanonical release ZIP: %s", path)
 		}
 		if forbiddenExtensions[filepath.Ext(entry.Name())] || strings.HasPrefix(entry.Name(), ".env") {
 			t.Errorf("forbidden deployment, release, or environment artifact: %s", path)

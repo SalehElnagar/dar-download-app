@@ -11,7 +11,7 @@ import (
 	"github.com/SalehElnagar/dar-download-app/internal/strictjson"
 )
 
-// MailStub is an internal-only, no-delivery SendGrid-compatible POC endpoint.
+// MailStub is an internal-only, no-delivery SendGrid-compatible test endpoint.
 type MailStub struct {
 	scenario     string
 	timeoutDelay time.Duration
@@ -90,7 +90,7 @@ func (stub *MailStub) ServeHTTP(response http.ResponseWriter, request *http.Requ
 	}
 }
 
-// RequestCount is non-PII evidence for the POC only.
+// RequestCount is non-PII test evidence only.
 func (stub *MailStub) RequestCount() int {
 	stub.mu.Lock()
 	defer stub.mu.Unlock()

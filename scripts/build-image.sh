@@ -5,10 +5,27 @@ umask 077
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 evidence_dir="$repo_root/.security/evidence"
 marker="$evidence_dir/prebuild.ok"
-image_ref=${IMAGE_REF:-dar-download-app:local}
+component=${IMAGE_COMPONENT:-download}
 version=${VERSION:-dev}
 target_platform=${TARGET_PLATFORM:-linux/amd64}
 cd "$repo_root"
+
+case "$component" in
+  download)
+    image_ref=${IMAGE_REF:-dar-download-app:local}
+    dockerfile=Dockerfile
+    evidence_prefix=
+    ;;
+  worker)
+    image_ref=${IMAGE_REF:-dar-distribution-worker:local}
+    dockerfile=Dockerfile.worker
+    evidence_prefix=worker-
+    ;;
+  *)
+    printf 'unsupported image component: %s\n' "$component" >&2
+    exit 1
+    ;;
+esac
 
 if [[ ! -f "$marker" ]]; then
   printf '%s\n' "current pre-build evidence is required before image construction." >&2
@@ -38,7 +55,8 @@ docker build \
   --sbom=false \
   --build-arg "VERSION=$version" \
   --build-arg "REVISION=$revision" \
-  --iidfile "$evidence_dir/image.iid" \
+  --file "$dockerfile" \
+  --iidfile "$evidence_dir/${evidence_prefix}image.iid" \
   --tag "$image_ref" \
   .
 
@@ -48,6 +66,6 @@ image_id=$(docker image inspect --format '{{.Id}}' "$image_ref")
   printf 'image_ref=%s\n' "$image_ref"
   printf 'image_id=%s\n' "$image_id"
   printf 'target_platform=%s\n' "$target_platform"
-} >"$evidence_dir/image.ok"
+} >"$evidence_dir/${evidence_prefix}image.ok"
 
 printf 'image built: %s (%s)\n' "$image_ref" "$image_id"

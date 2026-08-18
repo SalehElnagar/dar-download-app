@@ -79,8 +79,7 @@ func TestLiveMailerDisablesProviderTrackingAndUsesStableApplicationURL(t *testin
 	})}
 	mailer, err := NewHTTPMailer(MailConfig{
 		Mode: MailModeLive, FromEmail: "verified@example.com", FromName: "DAR POC",
-		AllowedRecipients: []string{"ava.example@example.com"}, APIKey: "unit-provider-value",
-		Client: client,
+		APIKey: "unit-provider-value", Client: client,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -129,15 +128,15 @@ func TestLiveMailerDisablesProviderTrackingAndUsesStableApplicationURL(t *testin
 	}
 }
 
-func TestMailerRejectsRecipientOutsideAllowlistBeforeNetwork(t *testing.T) {
+func TestSandboxMailerRejectsRecipientOutsideAllowlistBeforeNetwork(t *testing.T) {
 	t.Parallel()
 	called := false
 	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		called = true
-		return response(http.StatusAccepted, nil), nil
+		return response(http.StatusOK, nil), nil
 	})}
 	mailer, err := NewHTTPMailer(MailConfig{
-		Mode: MailModeLive, FromEmail: "verified@example.com", FromName: "DAR POC",
+		Mode: MailModeSandbox, FromEmail: "verified@example.com", FromName: "DAR POC",
 		AllowedRecipients: []string{"allowed@example.com"}, APIKey: "unit-provider-value",
 		Client: client,
 	})
@@ -149,6 +148,16 @@ func TestMailerRejectsRecipientOutsideAllowlistBeforeNetwork(t *testing.T) {
 
 	if result.Outcome != MailPermanent || result.ReasonCode != "RECIPIENT_NOT_ALLOWED" || called {
 		t.Fatalf("result=%#v called=%v", result, called)
+	}
+}
+
+func TestSandboxMailerRequiresExplicitRecipientAllowlist(t *testing.T) {
+	t.Parallel()
+	if _, err := NewHTTPMailer(MailConfig{
+		Mode: MailModeSandbox, FromEmail: "verified@example.com", FromName: "DAR POC",
+		APIKey: "unit-provider-value",
+	}); err == nil {
+		t.Fatal("NewHTTPMailer() accepted sandbox mode without an allowlist")
 	}
 }
 
