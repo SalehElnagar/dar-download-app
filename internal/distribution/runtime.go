@@ -55,7 +55,7 @@ func RunWorker(ctx context.Context, logger *slog.Logger, config RuntimeConfig) e
 		config.ServiceBusNamespace,
 		credential,
 		&azservicebus.ClientOptions{
-			ApplicationID: "harmony-dar-distribution-go/0.1",
+			ApplicationID: "dar-distribution-go/0.1",
 			RetryOptions: azservicebus.RetryOptions{
 				MaxRetries: 3, RetryDelay: time.Second, MaxRetryDelay: 10 * time.Second,
 			},

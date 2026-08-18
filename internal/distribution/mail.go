@@ -127,7 +127,7 @@ func (mailer *HTTPMailer) Send(ctx context.Context, notification Notification) M
 	}
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("User-Agent", "harmony-dar-distribution-go/0.1")
+	request.Header.Set("User-Agent", "dar-distribution-go/0.1")
 	if mailer.mode != MailModeStub {
 		request.Header.Set("Authorization", "Bearer "+mailer.apiKey)
 	}

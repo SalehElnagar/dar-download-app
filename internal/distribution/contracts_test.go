@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 )
 
@@ -59,6 +61,21 @@ func TestParseQueueMessageRejectsPIIAndNoncanonicalJSON(t *testing.T) {
 	noncanonical := append([]byte(" "), fixture.messageBody...)
 	if _, err := ParseQueueMessage(noncanonical, fixture.messageID); err == nil {
 		t.Fatal("ParseQueueMessage() accepted noncanonical JSON")
+	}
+}
+
+func TestReadBoundedAcceptsExactLimit(t *testing.T) {
+	t.Parallel()
+	body, err := readBounded(strings.NewReader("1234"), 4)
+	if err != nil || string(body) != "1234" {
+		t.Fatalf("readBounded() = %q, %v", body, err)
+	}
+}
+
+func TestReadBoundedRejectsBodyOverLimit(t *testing.T) {
+	t.Parallel()
+	if _, err := readBounded(strings.NewReader("1234"), 3); !errors.Is(err, ErrContract) {
+		t.Fatalf("readBounded() error = %v, want %v", err, ErrContract)
 	}
 }
 

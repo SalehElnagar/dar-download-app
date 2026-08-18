@@ -47,7 +47,7 @@ func (store *AzureBlobStore) ReadSmall(ctx context.Context, reference BlobRefere
 		return nil, err
 	}
 	defer response.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(response.Body, maximum+1))
+	body, err := readBounded(response.Body, maximum)
 	if err != nil || !reference.Matches(body) {
 		return nil, ErrContract
 	}
@@ -131,7 +131,7 @@ func (store *AzureReceiptStore) Get(ctx context.Context, path string) (StoredRec
 		return StoredReceipt{}, false, sanitizeAzureError(err)
 	}
 	defer response.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(response.Body, 32*1024+1))
+	body, err := readBounded(response.Body, 32*1024)
 	if err != nil || response.ContentLength == nil || int64(len(body)) != *response.ContentLength ||
 		response.ETag == nil || !metadataDigestMatches(response.Metadata, body) {
 		return StoredReceipt{}, false, ErrReceiptConflict

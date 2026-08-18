@@ -24,18 +24,18 @@ var (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	port, err := boundedEnvInt("HARMONY_DAR_STUB_PORT", 8080, 1024, 65535)
+	port, err := boundedEnvInt("DAR_STUB_PORT", 8080, 1024, 65535)
 	if err != nil {
 		logger.Error("stub configuration rejected", "event", "fatal")
 		os.Exit(1)
 	}
-	timeoutSeconds, err := boundedEnvInt("HARMONY_DAR_STUB_TIMEOUT_SECONDS", 15, 1, 30)
+	timeoutSeconds, err := boundedEnvInt("DAR_STUB_TIMEOUT_SECONDS", 15, 1, 30)
 	if err != nil {
 		logger.Error("stub configuration rejected", "event", "fatal")
 		os.Exit(1)
 	}
 	stub, err := distribution.NewMailStub(
-		environmentOrDefault("HARMONY_DAR_STUB_SCENARIO", "accepted"),
+		environmentOrDefault("DAR_STUB_SCENARIO", "accepted"),
 		time.Duration(timeoutSeconds)*time.Second,
 	)
 	if err != nil {

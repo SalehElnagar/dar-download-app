@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -178,6 +179,21 @@ func (reference BatchReference) valid() bool {
 func canonical(raw []byte, value any) bool {
 	encoded, err := json.Marshal(value)
 	return err == nil && bytes.Equal(raw, encoded)
+}
+
+func readBounded(reader io.Reader, maximum int64) ([]byte, error) {
+	if reader == nil || maximum < 1 {
+		return nil, ErrContract
+	}
+	var buffer bytes.Buffer
+	limited := &io.LimitedReader{R: reader, N: maximum + 1}
+	if _, err := buffer.ReadFrom(limited); err != nil {
+		return nil, err
+	}
+	if int64(buffer.Len()) > maximum {
+		return nil, ErrContract
+	}
+	return buffer.Bytes(), nil
 }
 
 func validTimestamp(value string) bool {

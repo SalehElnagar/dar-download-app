@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -56,12 +55,12 @@ func (stub *MailStub) ServeHTTP(response http.ResponseWriter, request *http.Requ
 		response.WriteHeader(http.StatusNotFound)
 		return
 	}
-	if request.Header.Get("Authorization") != "" {
+	if len(request.Header.Values("Authorization")) != 0 {
 		response.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	request.Body = http.MaxBytesReader(response, request.Body, 64*1024)
-	body, err := io.ReadAll(request.Body)
+	body, err := readBounded(request.Body, 64*1024)
 	if err != nil || len(body) == 0 || len(body) > 64*1024 || !validStubPayload(body) {
 		response.WriteHeader(http.StatusBadRequest)
 		return
