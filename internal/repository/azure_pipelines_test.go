@@ -68,6 +68,35 @@ func TestCIPipelineRunsRepositoryOwnedSecurityCandidate(t *testing.T) {
 	}
 }
 
+func TestCIPipelineSchedulesDailySourceAndWeeklyFullSecurityScans(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(repositoryRoot(t), "azure-pipelines", "ci.yml")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(body)
+	for _, required := range []string{
+		"schedules:",
+		`cron: "0 6 * * 1-6"`,
+		"displayName: Daily source and dependency security scan",
+		`cron: "0 6 * * 0"`,
+		"displayName: Weekly full image and DAST security scan",
+		"Build.CronSchedule.DisplayName",
+	} {
+		if !strings.Contains(text, required) {
+			t.Errorf("pipeline missing scheduled-security control %q", required)
+		}
+	}
+	if strings.Count(text, "always: true") != 2 {
+		t.Error("both security schedules must run even when source is unchanged")
+	}
+	fullCandidateCondition := "condition: and(succeeded(), or(ne(variables['Build.Reason'], 'Schedule'), eq(variables['Build.CronSchedule.DisplayName'], 'Weekly full image and DAST security scan')))"
+	if strings.Count(text, fullCandidateCondition) != 4 {
+		t.Error("all four image build and scan steps must skip only the daily source-only schedule")
+	}
+}
+
 func TestRepositoryContainsNoRealRecipientFile(t *testing.T) {
 	t.Parallel()
 	directory := filepath.Join(repositoryRoot(t), "recipients")

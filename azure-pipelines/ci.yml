@@ -9,6 +9,21 @@ pr:
     include:
       - main
 
+schedules:
+  - cron: "0 6 * * 1-6"
+    displayName: Daily source and dependency security scan
+    branches:
+      include:
+        - main
+    always: true
+
+  - cron: "0 6 * * 0"
+    displayName: Weekly full image and DAST security scan
+    branches:
+      include:
+        - main
+    always: true
+
 pool:
   vmImage: ubuntu-24.04
 
@@ -60,12 +75,14 @@ stages:
               export VERSION="azdo-$(Build.SourceVersion)"
               ./scripts/build-image.sh
             displayName: Build exact download application image
+            condition: and(succeeded(), or(ne(variables['Build.Reason'], 'Schedule'), eq(variables['Build.CronSchedule.DisplayName'], 'Weekly full image and DAST security scan')))
 
           - bash: |
               set -euo pipefail
               export IMAGE_REF="dar-download-app:azdo-$(Build.SourceVersion)"
               ./scripts/postbuild.sh
             displayName: Scan and dynamically test exact image
+            condition: and(succeeded(), or(ne(variables['Build.Reason'], 'Schedule'), eq(variables['Build.CronSchedule.DisplayName'], 'Weekly full image and DAST security scan')))
 
           - bash: |
               set -euo pipefail
@@ -73,12 +90,14 @@ stages:
               export VERSION="azdo-$(Build.SourceVersion)"
               ./scripts/build-worker-image.sh
             displayName: Build exact notification worker image
+            condition: and(succeeded(), or(ne(variables['Build.Reason'], 'Schedule'), eq(variables['Build.CronSchedule.DisplayName'], 'Weekly full image and DAST security scan')))
 
           - bash: |
               set -euo pipefail
               export WORKER_IMAGE_REF="dar-distribution-worker:azdo-$(Build.SourceVersion)"
               ./scripts/postbuild-worker.sh
             displayName: Generate SBOMs and scan exact worker image
+            condition: and(succeeded(), or(ne(variables['Build.Reason'], 'Schedule'), eq(variables['Build.CronSchedule.DisplayName'], 'Weekly full image and DAST security scan')))
 
           - task: PublishPipelineArtifact@1
             displayName: Retain successful candidate evidence
