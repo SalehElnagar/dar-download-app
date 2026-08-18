@@ -3,6 +3,21 @@
 No automated process can establish that an application is “100% secure.” This repository uses
 independent, fail-closed controls to reduce known risk and make each release decision auditable.
 
+## Automatic execution
+
+`azure-pipelines/ci.yml` runs the complete source and two-image candidate for pull requests and
+updates to `main`. Scheduled runs use current vulnerability databases even when source has not
+changed:
+
+- 06:00 UTC Monday through Saturday: source, dependency, secret, static-analysis, test, race,
+  fuzz, and filesystem scans.
+- 06:00 UTC Sunday: the same source gate plus both image builds, SBOMs, Trivy, Grype, runtime
+  policy checks, and download-app DAST.
+
+These schedules become active only after an Azure DevOps pipeline definition is created from
+`azure-pipelines/ci.yml`. GitHub branch protection must then require that pipeline's exact PR
+status context.
+
 ## Before image construction
 
 `scripts/prebuild.sh` starts with Gitleaks. A secret finding stops the workflow immediately and
