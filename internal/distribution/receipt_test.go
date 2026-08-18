@@ -58,3 +58,19 @@ func TestStaleSendStartedBecomesUnknownWithoutResend(t *testing.T) {
 		t.Fatalf("RecoverStale() = %#v", recovered)
 	}
 }
+
+func TestReceiptAcceptsProductReleaseVersion(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 17, 19, 0, 0, 0, time.UTC)
+	receipt, err := ClaimReceipt(ReceiptIntent{
+		OperationID: repeatHex("a", 64), ReleaseID: "dar_receipt_test_01",
+		ReleaseVersion: "v8.31.1.01", RecipientID: repeatHex("b", 64),
+		HMACKeyVersion: "v1", Provider: "sendgrid", QueueMessageID: repeatHex("a", 64) + ":0",
+	}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receipt.ReleaseVersion != "v8.31.1.01" {
+		t.Fatalf("ReleaseVersion = %q", receipt.ReleaseVersion)
+	}
+}

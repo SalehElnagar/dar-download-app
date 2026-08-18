@@ -24,12 +24,17 @@ const (
 )
 
 var (
-	ErrContract         = errors.New("invalid distribution contract")
-	ErrDependency       = errors.New("distribution dependency unavailable")
-	digestPattern       = regexp.MustCompile(`^[a-f0-9]{64}$`)
-	commitPattern       = regexp.MustCompile(`^[a-f0-9]{40}$`)
-	releasePattern      = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$`)
-	semverPattern       = regexp.MustCompile(`^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?$`)
+	ErrContract           = errors.New("invalid distribution contract")
+	ErrDependency         = errors.New("distribution dependency unavailable")
+	digestPattern         = regexp.MustCompile(`^[a-f0-9]{64}$`)
+	commitPattern         = regexp.MustCompile(`^[a-f0-9]{40}$`)
+	releasePattern        = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$`)
+	releaseVersionPattern = regexp.MustCompile(
+		`^(?:` +
+			`(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?|` +
+			`v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.[0-9]{2}` +
+			`)$`,
+	)
 	repositoryPattern   = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 	containerPattern    = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$`)
 	downloadNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,122}\.(?:dar|zip)$`)
@@ -114,7 +119,7 @@ func ParseQueueMessage(raw []byte, brokerMessageID string) (QueueMessage, error)
 		message.MessageID != message.OperationID+":"+strconv.Itoa(message.RecipientBatch.BatchIndex) ||
 		!digestPattern.MatchString(message.OperationID) ||
 		!releasePattern.MatchString(message.ReleaseID) ||
-		!semverPattern.MatchString(message.ReleaseVersion) ||
+		!releaseVersionPattern.MatchString(message.ReleaseVersion) ||
 		!commitPattern.MatchString(message.SourceCommitSHA) ||
 		!validTimestamp(message.CreatedAt) ||
 		!validApplicationURL(message.ApplicationURL, message.ReleaseVersion) ||
@@ -135,7 +140,7 @@ func ParsePublishedManifest(raw []byte) (PublishedManifest, error) {
 		!repositoryPattern.MatchString(manifest.Repository) ||
 		!commitPattern.MatchString(manifest.SourceCommitSHA) ||
 		!releasePattern.MatchString(manifest.ReleaseID) ||
-		!semverPattern.MatchString(manifest.ReleaseVersion) ||
+		!releaseVersionPattern.MatchString(manifest.ReleaseVersion) ||
 		!downloadNamePattern.MatchString(manifest.DownloadName) ||
 		!validTimestamp(manifest.PublishedAt) || !manifest.DAR.valid() {
 		return PublishedManifest{}, ErrContract

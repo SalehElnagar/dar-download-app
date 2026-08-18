@@ -67,7 +67,7 @@ type ReceiptIntent struct {
 func ClaimReceipt(intent ReceiptIntent, now time.Time) (Receipt, error) {
 	if !digestPattern.MatchString(intent.OperationID) ||
 		!releasePattern.MatchString(intent.ReleaseID) ||
-		!semverPattern.MatchString(intent.ReleaseVersion) ||
+		!releaseVersionPattern.MatchString(intent.ReleaseVersion) ||
 		!digestPattern.MatchString(intent.RecipientID) ||
 		!versionLabelPattern.MatchString(intent.HMACKeyVersion) ||
 		(intent.Provider != "stub" && intent.Provider != "sendgrid") ||
@@ -277,7 +277,7 @@ func (receipt Receipt) finish(now time.Time, status ReceiptStatus, httpStatus in
 
 func (receipt Receipt) validate() error {
 	if receipt.SchemaVersion != "1.0" || !digestPattern.MatchString(receipt.OperationID) ||
-		!releasePattern.MatchString(receipt.ReleaseID) || !semverPattern.MatchString(receipt.ReleaseVersion) ||
+		!releasePattern.MatchString(receipt.ReleaseID) || !releaseVersionPattern.MatchString(receipt.ReleaseVersion) ||
 		!digestPattern.MatchString(receipt.RecipientID) || !versionLabelPattern.MatchString(receipt.HMACKeyVersion) ||
 		(receipt.Provider != "stub" && receipt.Provider != "sendgrid") ||
 		receipt.AttemptCount < 1 || receipt.AttemptCount > 5 || receipt.StateVersion < 1 ||

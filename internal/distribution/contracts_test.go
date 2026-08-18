@@ -41,6 +41,24 @@ func TestWorkerContractsAcceptZIPReleaseArtifact(t *testing.T) {
 	}
 }
 
+func TestWorkerContractsAcceptProductReleaseVersion(t *testing.T) {
+	t.Parallel()
+	fixture := newFixtureForRelease(
+		t,
+		nil,
+		"zip",
+		"v8.31.1.01",
+		"dar-8.31.1.01.zip",
+	)
+
+	if _, err := ParseQueueMessage(fixture.messageBody, fixture.messageID); err != nil {
+		t.Fatalf("ParseQueueMessage() product version error = %v", err)
+	}
+	if _, err := ParsePublishedManifest(fixture.manifestBody); err != nil {
+		t.Fatalf("ParsePublishedManifest() product version error = %v", err)
+	}
+}
+
 func TestParseQueueMessageRejectsPIIAndNoncanonicalJSON(t *testing.T) {
 	t.Parallel()
 	fixture := newFixture(t, nil)
@@ -97,6 +115,23 @@ func newFixture(t *testing.T, recipients []Recipient) fixture {
 
 func newFixtureForExtension(t *testing.T, recipients []Recipient, extension string) fixture {
 	t.Helper()
+	return newFixtureForRelease(
+		t,
+		recipients,
+		extension,
+		"1.0.0",
+		"go-worker-test-1.0.0."+extension,
+	)
+}
+
+func newFixtureForRelease(
+	t *testing.T,
+	recipients []Recipient,
+	extension string,
+	releaseVersion string,
+	downloadName string,
+) fixture {
+	t.Helper()
 	if recipients == nil {
 		recipients = []Recipient{{
 			Email:     "ava.example@example.com",
@@ -121,8 +156,8 @@ func newFixtureForExtension(t *testing.T, recipients []Recipient, extension stri
 		Repository:      "salehelnagar/dar-download",
 		SourceCommitSHA: repeatHex("b", 40),
 		ReleaseID:       releaseID,
-		ReleaseVersion:  "1.0.0",
-		DownloadName:    "go-worker-test-1.0.0." + extension,
+		ReleaseVersion:  releaseVersion,
+		DownloadName:    downloadName,
 		PublishedAt:     "2026-08-17T19:00:00Z",
 		DAR: BlobReference{
 			Container: "dar-releases",
@@ -154,11 +189,11 @@ func newFixtureForExtension(t *testing.T, recipients []Recipient, extension stri
 		MessageID:       messageID,
 		OperationID:     operationID,
 		ReleaseID:       releaseID,
-		ReleaseVersion:  "1.0.0",
+		ReleaseVersion:  releaseVersion,
 		SourceCommitSHA: repeatHex("b", 40),
 		Manifest:        manifestRef,
 		RecipientBatch:  batchRef,
-		ApplicationURL:  "https://dar-poc.example.internal/v1/releases/1.0.0/download/go-worker-test-1.0.0." + extension,
+		ApplicationURL:  "https://dar-poc.example.internal/v1/releases/" + releaseVersion + "/download/" + downloadName,
 		CreatedAt:       "2026-08-17T19:00:00Z",
 	}
 	messageBody, err := json.Marshal(message)
