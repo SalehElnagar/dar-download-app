@@ -94,7 +94,6 @@ export GOBIN="$tool_bin"
 go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
 go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
 go install github.com/securego/gosec/v2/cmd/gosec@v2.28.0
-go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 
 docker pull semgrep/semgrep@sha256:67319956da3dcb58baf5b322899c15458e3963e7018a86aeeb5cd224e69cb77a >/dev/null
 docker pull ghcr.io/zaproxy/zaproxy@sha256:781a2bdaea47324e7bab583e2263f21d257b0aee61ed51521a5be45f5f5081ef >/dev/null

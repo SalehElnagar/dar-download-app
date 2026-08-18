@@ -48,29 +48,39 @@ type HTTPMailer struct {
 	client    *http.Client
 }
 
-// NewHTTPMailer validates endpoints and allowlists before any request can be sent.
+// NewHTTPMailer validates endpoints and non-delivery allowlists before any request can be sent.
+// Live recipients are authorized by the immutable batch that the worker verifies before calling
+// this boundary; duplicating customer addresses in process configuration would not scale and
+// would create a second PII source of truth.
 func NewHTTPMailer(config MailConfig) (*HTTPMailer, error) {
 	fromEmail, ok := canonicalEmail(config.FromEmail)
 	if !ok || config.FromName == "" || len(config.FromName) > 64 || !controlFree(config.FromName) {
 		return nil, ErrContract
 	}
-	maximumRecipients := 2
-	if config.Mode == MailModeStub {
-		maximumRecipients = 500
-	}
-	if len(config.AllowedRecipients) < 1 || len(config.AllowedRecipients) > maximumRecipients {
-		return nil, ErrContract
-	}
-	allowed := make(map[string]struct{}, len(config.AllowedRecipients))
-	for _, raw := range config.AllowedRecipients {
-		email, valid := canonicalEmail(raw)
-		if !valid {
+	allowed := make(map[string]struct{})
+	if config.Mode == MailModeLive {
+		if len(config.AllowedRecipients) != 0 {
 			return nil, ErrContract
 		}
-		if _, duplicate := allowed[email]; duplicate {
+	} else {
+		maximumRecipients := 2
+		if config.Mode == MailModeStub {
+			maximumRecipients = 500
+		}
+		if len(config.AllowedRecipients) < 1 || len(config.AllowedRecipients) > maximumRecipients {
 			return nil, ErrContract
 		}
-		allowed[email] = struct{}{}
+		allowed = make(map[string]struct{}, len(config.AllowedRecipients))
+		for _, raw := range config.AllowedRecipients {
+			email, valid := canonicalEmail(raw)
+			if !valid {
+				return nil, ErrContract
+			}
+			if _, duplicate := allowed[email]; duplicate {
+				return nil, ErrContract
+			}
+			allowed[email] = struct{}{}
+		}
 	}
 	endpoint := SendGridEndpoint
 	switch config.Mode {
@@ -114,8 +124,10 @@ func (mailer *HTTPMailer) Send(ctx context.Context, notification Notification) M
 	if !valid {
 		return MailResult{Outcome: MailPermanent, ReasonCode: "RECIPIENT_INVALID"}
 	}
-	if _, allowed := mailer.allowed[email]; !allowed {
-		return MailResult{Outcome: MailPermanent, ReasonCode: "RECIPIENT_NOT_ALLOWED"}
+	if mailer.mode != MailModeLive {
+		if _, allowed := mailer.allowed[email]; !allowed {
+			return MailResult{Outcome: MailPermanent, ReasonCode: "RECIPIENT_NOT_ALLOWED"}
+		}
 	}
 	body, err := json.Marshal(buildMailPayload(mailer, notification, email))
 	if err != nil || len(body) == 0 || len(body) > 64*1024 {

@@ -1,7 +1,7 @@
 # Requirement-to-Evidence Map
 
 This self-contained map identifies what the repository can prove locally and what remains a
-protected GitHub or live-platform responsibility. Passing evidence applies only to the exact
+protected Azure DevOps or live-platform responsibility. Passing evidence applies only to the exact
 recorded source digest and image ID.
 
 ## Functional requirements
@@ -17,11 +17,12 @@ recorded source digest and image ID.
 | Authentication precedes Blob existence checks | Handler denial matrix asserts zero storage calls for absent or invalid identity evidence |
 | Blob delivery uses dedicated storage identity and one object version | Managed-identity Blob adapter plus ETag-bound full and single-range tests |
 | Transfers and failures are bounded | Header/path/object/time limits, sequential 4 MiB reads, cancellation/error tests, and redacted log tests |
-| Product repository excludes deployment, customer, release, and local AI-operation artifacts | Tracked-tree, ignored-path, extension, link, and workflow-policy tests |
+| Product repository contains the Go app, worker, publisher, Azure DevOps definitions, and only canonical release ZIPs while excluding recipient data and deployment state | Tracked-tree, ignored-path, extension, link, pipeline, and recipient-file policy tests |
+| Release messages are PII-free and publication precedes queue effects | Go publisher tests parse messages through the worker contract and assert all immutable Blob effects exist before send |
 | Source gates precede image construction | Unit, integration, contract, race, deterministic fuzz, dependency, SAST, secret, and workflow-order checks |
 | Final image is minimal and independently checked | Digest-pinned static build; Linux AMD64 manifest and ELF checks; distroless non-root policy; two image scanners; offline fail-closed ZAP scan |
 | Security exceptions cannot silently weaken the candidate | Exactly empty exception registry enforced by repository test and `SECURITY.md` |
-| Publishing is immutable, least-privilege, signed, and provenance-bound | Pinned release workflow with cross-job candidate/provenance readback and reviewed dependency proposals |
+| Release publication is immutable, least-privilege, and input-bound | Azure DevOps exact-commit and recipient-digest checks, protected environment, workload federation, Blob version/CAS code, and PII-free message tests |
 
 ## Measurable outcomes
 
@@ -41,7 +42,7 @@ recorded source digest and image ID.
 ## Evidence that cannot be produced locally
 
 Before production promotion, the owner must obtain an independent code/security review, a
-successful run in the private GitHub repository, signature and attestation verification for the
+successful Azure DevOps run from the private GitHub repository, signature and attestation verification for the
 registry digest, and an authorized staging test covering the chosen external OIDC flow, token or
 session validation, caller-header stripping, private ingress, private Blob access, full/resumed
 checksum, and penetration testing. Live deployment readback must also prove that no platform

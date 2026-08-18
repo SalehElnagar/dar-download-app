@@ -6,7 +6,7 @@ export PATH="$repo_root/.security/tools/bin:$PATH"
 
 required=(
   go docker gitleaks trivy grype syft shellcheck shfmt curl jq tar
-  staticcheck govulncheck gosec actionlint
+  staticcheck govulncheck gosec
 )
 for tool in "${required[@]}"; do
   if ! command -v "$tool" >/dev/null 2>&1; then
@@ -23,7 +23,6 @@ staticcheck -version | grep -F 'v0.7.0' >/dev/null
 govulncheck -version | grep -F 'govulncheck@v1.7.0' >/dev/null
 go version -m "$(command -v gosec)" |
   grep -F $'\tmod\tgithub.com/securego/gosec/v2\tv2.28.0\t' >/dev/null
-actionlint -version | grep -F 'v1.7.12' >/dev/null
 gitleaks version | grep -Fx '8.30.1' >/dev/null
 trivy --version | head -1 | grep -F '0.74.0' >/dev/null
 grype version | awk -F: '/Version/{gsub(/ /,"",$2); print $2; exit}' | grep -Fx '0.117.0' >/dev/null

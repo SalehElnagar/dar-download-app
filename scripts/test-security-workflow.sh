@@ -26,19 +26,35 @@ if ! grep -Fq "target_platform=\${TARGET_PLATFORM:-linux/amd64}" scripts/build-i
   printf '%s\n' "image construction is not explicitly bound to the recorded Linux AMD64 target." >&2
   exit 1
 fi
-if ! grep -Eq '^FROM golang:[^[:space:]]+@sha256:[0-9a-f]{64} AS build$' Dockerfile ||
-  grep -Fq "FROM --platform=\$BUILDPLATFORM" Dockerfile ||
-  grep -Eq '^ARG TARGET(OS|ARCH)=' Dockerfile; then
-  printf '%s\n' "Dockerfile builder is not portable, digest-pinned, and bound to target arguments." >&2
+for dockerfile in Dockerfile Dockerfile.worker; do
+  if ! grep -Eq '^FROM golang:[^[:space:]]+@sha256:[0-9a-f]{64} AS build$' "$dockerfile" ||
+    grep -Fq "FROM --platform=\$BUILDPLATFORM" "$dockerfile" ||
+    grep -Eq '^ARG TARGET(OS|ARCH)=' "$dockerfile"; then
+    printf 'Dockerfile is not portable, digest-pinned, and bound to target arguments: %s\n' \
+      "$dockerfile" >&2
+    exit 1
+  fi
+done
+if find .github/workflows -type f -print -quit 2>/dev/null | grep -q .; then
+  printf '%s\n' "GitHub Actions must not remain an active production execution path." >&2
   exit 1
 fi
-if ! grep -Fq './scripts/create-provenance.sh' .github/workflows/release.yaml; then
-  printf '%s\n' "release workflow does not create source-bound provenance." >&2
-  exit 1
-fi
-if ! grep -Fq './scripts/verify-candidate-transfer.sh' .github/workflows/release.yaml ||
+for candidate_step in \
+  './scripts/bootstrap-tools.sh' \
+  './scripts/prebuild.sh' \
+  './scripts/build-image.sh' \
+  './scripts/postbuild.sh' \
+  './scripts/build-worker-image.sh' \
+  './scripts/postbuild-worker.sh'; do
+  if ! grep -Fq "$candidate_step" azure-pipelines/ci.yml; then
+    printf 'Azure DevOps candidate pipeline is missing: %s\n' "$candidate_step" >&2
+    exit 1
+  fi
+done
+if ! grep -Fq 'validated-release-input/dar-release-publisher' \
+  azure-pipelines/dar-release-distribution.yml ||
   ! grep -Fq 'scripts/test-candidate-transfer.sh' scripts/postbuild.sh; then
-  printf '%s\n' "candidate transfer integrity is not enforced locally and at publish time." >&2
+  printf '%s\n' "release publication or local candidate-transfer integrity is not enforced." >&2
   exit 1
 fi
 for transfer_check in \
@@ -73,7 +89,7 @@ if ! grep -Fq "docker network create --internal \"\$network\"" scripts/dast.sh |
   printf '%s\n' "DAST is not offline, deterministic, and fail-closed on warnings." >&2
   exit 1
 fi
-# GitHub Actions run 31900648575 exposed a Linux bind-mount permission mismatch.
+# A prior Linux CI run exposed a bind-mount permission mismatch.
 report_prepare_line=$(grep -nF "install -m 0666 /dev/null \"\$report_file\"" scripts/dast.sh | cut -d: -f1)
 report_scan_line=$(grep -n '^[[:space:]]*zap-api-scan\.py' scripts/dast.sh | cut -d: -f1)
 report_restore_line=$(grep -n '^[[:space:]]*restore_report_permissions$' scripts/dast.sh | tail -n 1 | cut -d: -f1)

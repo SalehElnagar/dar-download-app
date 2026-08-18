@@ -1,8 +1,9 @@
 # Contributing
 
-Keep changes within the application boundary. Do not add cloud or identity-provider provisioning,
-live issuer values, customer data, DAR files, deployment state, credentials, or generated security
-evidence.
+Keep changes within the DAR product boundary. Do not add cloud or identity-provider provisioning,
+live issuer values, recipient/customer data, deployment state, credentials, or generated security
+evidence. Product release ZIPs are permitted only under the exact canonical `releases/` contract;
+raw `.dar` files and arbitrary archives remain prohibited.
 
 For behavior changes:
 

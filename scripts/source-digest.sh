@@ -21,5 +21,8 @@ hash_stream() {
 }
 
 while IFS= read -r -d '' file; do
-  printf '%s\0%s\0' "$file" "$(hash_file "$file")"
+  [[ -f "$file" ]] || continue
+  executable=-
+  [[ -x "$file" ]] && executable=x
+  printf '%s\0%s\0%s\0' "$file" "$executable" "$(hash_file "$file")"
 done < <(git ls-files --cached --others --exclude-standard -z | LC_ALL=C sort -z) | hash_stream

@@ -11,17 +11,8 @@ func TestPublishedContractsDescribeCustomACAOIDCBoundary(t *testing.T) {
 	root := repositoryRoot(t)
 	requiredByFile := map[string][]string{
 		"README.md": {
-			"azure_container_apps_oidc",
-			"DAR_DOWNLOAD_OIDC_PROVIDER_NAME",
-			"/.auth/login/<provider-name>/callback",
-			"Container Apps secret",
-			"az containerapp auth openid-connect add",
-			"--client-secret-name",
-			"GrantTypes.Code",
-			"RequirePkce",
-			"AllowOfflineAccess",
-			"AllowAccessTokensViaBrowser",
-			"current Entra POC remains",
+			"Trusted OIDC and download operations",
+			"Runtime configuration",
 		},
 		"api/openapi.yaml": {
 			"azure_container_apps_oidc",

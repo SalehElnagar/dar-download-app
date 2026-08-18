@@ -1,10 +1,16 @@
 * @SalehElnagar
 
 /.github/ @SalehElnagar
+/azure-pipelines/ @SalehElnagar
 /Dockerfile @SalehElnagar
+/Dockerfile.worker @SalehElnagar
+/releases/ @SalehElnagar
+/recipients/ @SalehElnagar
 /internal/auth/ @SalehElnagar
 /internal/blob/ @SalehElnagar
 /internal/config/ @SalehElnagar
+/internal/distribution/ @SalehElnagar
+/internal/publication/ @SalehElnagar
 /internal/httpapi/ @SalehElnagar
 /scripts/ @SalehElnagar
 /security/ @SalehElnagar

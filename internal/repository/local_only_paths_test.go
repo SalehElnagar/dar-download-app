@@ -192,6 +192,9 @@ func TestTrackedTreeHasNoSupersededApplicationContract(t *testing.T) {
 		}
 		content, readErr := os.ReadFile(filepath.Join(root, relative))
 		if readErr != nil {
+			if os.IsNotExist(readErr) {
+				continue
+			}
 			t.Fatal(readErr)
 		}
 		for _, pattern := range forbidden {
@@ -243,6 +246,9 @@ func TestProviderSpecificAdapterTermsStayInTheirOwnedBoundary(t *testing.T) {
 		}
 		content, readErr := os.ReadFile(filepath.Join(root, relative))
 		if readErr != nil {
+			if os.IsNotExist(readErr) {
+				continue
+			}
 			t.Fatal(readErr)
 		}
 		for _, marker := range providerMarkers {

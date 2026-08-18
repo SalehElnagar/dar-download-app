@@ -34,7 +34,14 @@ platform is recorded with the image evidence rather than inferred from the devel
 
 ## After image construction
 
-`scripts/postbuild.sh` verifies that the image still matches the validated source and then:
+`scripts/postbuild.sh` verifies that each image still matches the validated source. Both the
+download and worker candidates receive SBOM, vulnerability, platform, non-root, minimal-content,
+and ELF architecture checks. The download image additionally receives the read-only runtime smoke,
+offline ZAP DAST, and candidate-transfer controls because it owns ingress. The worker has no public
+HTTP surface; its Azure, Service Bus, Blob, Key Vault, and SendGrid behavior remains a required
+staging integration test.
+
+For the applicable image, the scripts:
 
 - generates SPDX and CycloneDX JSON SBOMs with Syft;
 - scans the exact image with Trivy and Grype, blocking High and Critical findings;
@@ -54,21 +61,16 @@ registry to remain exactly empty, so adding an entry cannot silently change scan
 
 ## Release protection
 
-Pull-request CI has read-only repository permission. A tag build also has read-only permission
-and exports only the validated image and evidence. A separate `image-release` environment gates
-the short publish job that receives package and OIDC permissions.
+Azure DevOps CI checks out without retained Git credentials and retains only successful candidate
+evidence. Release publication separately binds the exact GitHub `main` commit and the SHA-256 of
+the protected recipient Secure File, then uses a protected Azure DevOps environment, a private
+agent, and a workload-federated service connection.
 
-The publish job refuses existing release and source tags, pushes a source-addressed candidate,
-independently cross-checks the transferred source/image/post-build markers, Linux AMD64 image,
-non-root user, SBOM digest, repository, revision, tag, and provenance, then signs the exact
-registry digest. It attaches signed SPDX and SLSA provenance attestations, verifies the keyless
-signature and both attestations, and only then promotes the digest to the version tag.
-
-Cosign keyless signing uses GitHub's short-lived OIDC identity and the public Sigstore trust
-root. The transparency record exposes signing metadata such as repository and workflow identity,
-but it does not expose source, DARs, issuer values, or image contents. If repository-name
-confidentiality becomes a requirement, replace keyless public signing with an approved private
-Sigstore or enterprise-managed key design before tagging a release.
+The distribution pipeline can create immutable release evidence and send to one Service Bus
+queue; it has no SendGrid or deployment authority. Image signing, registry promotion, and Azure
+deployment remain a separate protected platform workflow. The candidate evidence in this
+repository must be verified again against the exact promoted digest; a local or CI candidate by
+itself is not production authorization.
 
 ## Residual assurance
 

@@ -29,9 +29,13 @@ coverage.html
 .security/tools/
 sbom/
 
-# Customer/release artifacts never belong in source
+# Customer data and raw DARs never belong in source. Only canonical distributable ZIPs are
+# permitted under releases/ in this private product repository.
 *.dar
 *.zip
+!releases/v*/dar-*.zip
+recipients/*.csv
+!recipients/*.example.csv
 
 # Local-only workspaces
 .agents/

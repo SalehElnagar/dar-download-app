@@ -17,11 +17,13 @@ revision=2222222222222222222222222222222222222222
 repository=SalehElnagar/dar-download-app
 release_tag=v0.1.0
 EVIDENCE_DIR="$fixture_dir" \
-  GITHUB_REPOSITORY="$repository" \
-  GITHUB_SHA="$revision" \
-  GITHUB_REF="refs/tags/$release_tag" \
-  GITHUB_RUN_ID=123 \
-  GITHUB_RUN_ATTEMPT=1 \
+  SOURCE_REPOSITORY="$repository" \
+  SOURCE_REVISION="$revision" \
+  SOURCE_REF="refs/tags/$release_tag" \
+  BUILD_ID=123 \
+  BUILD_ATTEMPT=1 \
+  BUILDER_ID=https://dev.azure.com/example/project/_build/definitions/1 \
+  BUILD_URI='https://dev.azure.com/example/project/_build/results?buildId=123' \
   RELEASE_TAG="$release_tag" \
   "$repo_root/scripts/create-provenance.sh" >/dev/null
 

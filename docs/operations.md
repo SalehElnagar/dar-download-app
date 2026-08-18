@@ -17,7 +17,11 @@ reach the app. The app validates one authenticated subject before any Blob acces
 
 The platform repository owns the OIDC layer, identity-provider configuration, private ingress,
 networking, DNS, Blob account, managed identity, RBAC, monitoring, and deployment revision.
-This repository builds and validates only the application image.
+This repository builds and validates the download and worker source, provides the Go release
+publisher, and defines Azure DevOps pipelines. The platform repository still owns live resource
+provisioning, image promotion, identity-provider configuration, networking, DNS, RBAC,
+monitoring, and deployment revisions. See [release distribution operations](release-distribution.md)
+for the publication and notification path.
 
 ## Required platform configuration
 
@@ -170,9 +174,11 @@ Use `/healthz` only for liveness. It intentionally does not call the OIDC layer 
 Add a separate platform-level readiness or synthetic download check when those dependencies
 must be observed.
 
-Application logs are structured and deliberately exclude subjects, issuers, identity headers,
-Blob URLs and paths, request tokens, filenames, and raw errors. Monitor at the platform boundary
-for:
+Application download-audit logs deliberately include the opaque authenticated subject, release
+version, safe filename, application session ID, UTC time, byte count, and bounded terminal
+outcome. They exclude names, email addresses, tokens, cookies, raw identity headers, issuer
+payloads, Blob URLs, storage paths, credentials, and raw errors. Restrict and retain these logs as
+protected identity audit data. Monitor at the platform boundary for:
 
 - OIDC login, session, token-validation, or header-injection failures;
 - elevated `401`, `404`, `416`, or `502` rates;

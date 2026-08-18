@@ -4,20 +4,24 @@ umask 077
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 evidence_dir=${EVIDENCE_DIR:-$repo_root/.security/evidence}
-repository=${GITHUB_REPOSITORY:-}
-revision=${GITHUB_SHA:-}
-ref=${GITHUB_REF:-}
-run_id=${GITHUB_RUN_ID:-}
-run_attempt=${GITHUB_RUN_ATTEMPT:-}
+repository=${SOURCE_REPOSITORY:-}
+revision=${SOURCE_REVISION:-}
+ref=${SOURCE_REF:-}
+build_id=${BUILD_ID:-}
+build_attempt=${BUILD_ATTEMPT:-}
+builder_id=${BUILDER_ID:-}
+build_uri=${BUILD_URI:-}
 release_tag=${RELEASE_TAG:-}
 
 if [[ ! "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ||
   ! "$revision" =~ ^[a-f0-9]{40}$ ||
-  ! "$run_id" =~ ^[1-9][0-9]*$ ||
-  ! "$run_attempt" =~ ^[1-9][0-9]*$ ||
+  ! "$build_id" =~ ^[1-9][0-9]*$ ||
+  ! "$build_attempt" =~ ^[1-9][0-9]*$ ||
+  ! "$builder_id" =~ ^https://[^[:space:]]+$ ||
+  ! "$build_uri" =~ ^https://[^[:space:]]+$ ||
   ! "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+([.-][A-Za-z0-9]+)*)?$ ||
   "$ref" != "refs/tags/$release_tag" ]]; then
-  printf '%s\n' "invalid GitHub release provenance environment." >&2
+  printf '%s\n' "invalid release provenance environment." >&2
   exit 1
 fi
 
@@ -43,9 +47,9 @@ if [[ ! "$source_digest" =~ ^[a-f0-9]{64}$ ||
 fi
 
 jq -n \
-  --arg build_type "https://github.com/$repository/.github/workflows/release.yaml@v1" \
-  --arg builder "https://github.com/$repository/.github/workflows/release.yaml@$ref" \
-  --arg invocation "https://github.com/$repository/actions/runs/$run_id/attempts/$run_attempt" \
+  --arg build_type "https://slsa.dev/container-based-build/v1" \
+  --arg builder "$builder_id" \
+  --arg invocation "$build_uri/attempts/$build_attempt" \
   --arg repository "git+https://github.com/$repository" \
   --arg revision "$revision" \
   --arg ref "$ref" \

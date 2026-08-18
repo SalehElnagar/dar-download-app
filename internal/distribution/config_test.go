@@ -39,6 +39,36 @@ func TestParseWorkerEnvironmentRequiresProviderKeyOutsideStubMode(t *testing.T) 
 	}
 }
 
+func TestParseWorkerEnvironmentLiveModeUsesVerifiedBatchWithoutStaticAllowlist(t *testing.T) {
+	t.Parallel()
+	environment := workerEnvironment()
+	environment[WorkerMailModeEnv] = string(MailModeLive)
+	delete(environment, WorkerStubEndpointEnv)
+	delete(environment, WorkerAllowedRecipientsEnv)
+	environment[WorkerMailAPIKeyEnv] = "unit-provider-value"
+
+	config, err := ParseWorkerEnvironment(environment)
+	if err != nil {
+		t.Fatalf("ParseWorkerEnvironment() error = %v", err)
+	}
+	if config.MailMode != MailModeLive || len(config.MailerConfig().AllowedRecipients) != 0 {
+		t.Fatalf("config = %s", config)
+	}
+}
+
+func TestParseWorkerEnvironmentLiveModeRejectsEvenEmptyStaticAllowlistSetting(t *testing.T) {
+	t.Parallel()
+	environment := workerEnvironment()
+	environment[WorkerMailModeEnv] = string(MailModeLive)
+	delete(environment, WorkerStubEndpointEnv)
+	environment[WorkerAllowedRecipientsEnv] = ""
+	environment[WorkerMailAPIKeyEnv] = "unit-provider-value"
+
+	if _, err := ParseWorkerEnvironment(environment); err == nil {
+		t.Fatal("ParseWorkerEnvironment() accepted the retired live allowlist setting")
+	}
+}
+
 func TestParseWorkerEnvironmentRejectsNoncanonicalHMACEncoding(t *testing.T) {
 	t.Parallel()
 	environment := workerEnvironment()
