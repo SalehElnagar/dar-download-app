@@ -163,6 +163,17 @@ func buildMailPayload(mailer *HTTPMailer, notification Notification, email strin
 		}},
 		"subject": "DAR release " + notification.ReleaseVersion + " is ready",
 	}
+	if mailer.mode != MailModeStub {
+		payload["tracking_settings"] = map[string]any{
+			"click_tracking": map[string]bool{
+				"enable":      false,
+				"enable_text": false,
+			},
+			"open_tracking": map[string]bool{
+				"enable": false,
+			},
+		}
+	}
 	if mailer.mode == MailModeSandbox {
 		payload["mail_settings"] = map[string]any{
 			"sandbox_mode": map[string]bool{"enable": true},

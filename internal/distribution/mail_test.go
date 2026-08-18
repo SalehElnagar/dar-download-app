@@ -2,6 +2,7 @@ package distribution
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -65,6 +66,65 @@ func TestSandboxMailerUsesOfficialEndpointAndSimulationFlag(t *testing.T) {
 	}
 	body, _ := io.ReadAll(captured.Body)
 	if !strings.Contains(string(body), `"sandbox_mode":{"enable":true}`) {
+		t.Fatalf("body = %s", body)
+	}
+}
+
+func TestLiveMailerDisablesProviderTrackingAndUsesStableApplicationURL(t *testing.T) {
+	t.Parallel()
+	var captured *http.Request
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		captured = request
+		return response(http.StatusAccepted, nil), nil
+	})}
+	mailer, err := NewHTTPMailer(MailConfig{
+		Mode: MailModeLive, FromEmail: "verified@example.com", FromName: "DAR POC",
+		AllowedRecipients: []string{"ava.example@example.com"}, APIKey: "unit-provider-value",
+		Client: client,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	notification := testNotification()
+
+	result := mailer.Send(context.Background(), notification)
+
+	if result.Outcome != MailAccepted {
+		t.Fatalf("Send() = %#v", result)
+	}
+	body, err := io.ReadAll(captured.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload struct {
+		TrackingSettings *struct {
+			ClickTracking *struct {
+				Enable     bool `json:"enable"`
+				EnableText bool `json:"enable_text"`
+			} `json:"click_tracking"`
+			OpenTracking *struct {
+				Enable bool `json:"enable"`
+			} `json:"open_tracking"`
+		} `json:"tracking_settings"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.TrackingSettings == nil {
+		t.Fatalf("tracking_settings missing from body = %s", body)
+	}
+	if payload.TrackingSettings.ClickTracking == nil || payload.TrackingSettings.OpenTracking == nil {
+		t.Fatalf("provider tracking controls missing from body = %s", body)
+	}
+	if payload.TrackingSettings.ClickTracking.Enable ||
+		payload.TrackingSettings.ClickTracking.EnableText ||
+		payload.TrackingSettings.OpenTracking.Enable {
+		t.Fatalf("tracking settings = %#v", payload.TrackingSettings)
+	}
+	bodyText := string(body)
+	if strings.Count(bodyText, notification.ApplicationURL) != 2 ||
+		strings.Contains(strings.ToLower(bodyText), "/ls/click") ||
+		strings.Contains(strings.ToLower(bodyText), "blob.core.windows.net") {
 		t.Fatalf("body = %s", body)
 	}
 }
